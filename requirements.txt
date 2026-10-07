@@ -1,0 +1,9 @@
+requests>=2.31
+PyYAML>=6.0
+pyotp>=2.9
+python-dotenv>=1.0
+tzdata>=2024.1   # Windows has no built-in time-zone database
+pandas>=2.0      # backtester
+numpy>=1.24      # backtester
+matplotlib>=3.7  # backtester chart (optional)
+pytest>=8.0

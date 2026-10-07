@@ -1,0 +1,2 @@
+# Server-only Python packages (installed by setup.sh and push.sh; not needed on the laptop)
+oci>=2.120       # OCI Vault: read the bot's secrets with the server's instance principal (guardian/secrets.py)

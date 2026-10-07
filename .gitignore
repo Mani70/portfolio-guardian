@@ -1,0 +1,17 @@
+.env
+config.yaml
+state.json
+state.mock.json
+logs/
+__pycache__/
+.venv/
+.token_cache.json
+cache/
+results/
+backtest.yaml
+paper/
+trader/state/
+trader.yaml
+STOP
+backups/
+research/data/*.tgz

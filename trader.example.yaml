@@ -1,0 +1,74 @@
+# Trading engine settings. Copy to trader.yaml and edit.
+# Nothing here sends a real order until ALL of these hold:
+#   mode: live  +  the strategy's live: true  +  its paper record passed its gate  +  no STOP file
+#   +  your static IP whitelisted at indstocks.com/app/api-trading/access-tokens
+
+mode: paper                 # paper | live   (paper always runs alongside live, as the control)
+benchmark: NIFTYBEES        # market filter for the stock strategies
+journal: trader/state/journal.db
+compound: true              # each strategy reinvests its own profits (and shrinks after losses)
+
+capital:                    # rupees the engine may use
+  swing: 300000             # paper capital, and the most the live strategies may use
+  intraday: 100000
+  live_from_account: true   # live: if the account holds less, size from what it really has (free cash + positions)
+  reserve: 0                # live: rupees always left untouched in the account
+
+limits:
+  max_order_value: 150000   # hard cap per order
+  max_orders_per_day: 30
+  price_band_pct: 0.5       # marketable limit = live price +/- 0.5%
+  order_rate_per_sec: 2     # SEBI's retail threshold is 10/s; we stay far below it
+  kill_switch_file: STOP    # an empty file named STOP in this folder blocks all new entries
+
+swing:
+  amo_band_pct: 2           # opening-auction limit = yesterday's close +/- 2% (big gaps are not chased)
+  max_chase_pct: 3          # at 09:30, re-price an unfilled entry only within 3% of the plan
+
+intraday:
+  first_entry: "09:20"
+  last_entry: "14:30"
+  square_off: "15:15"
+  max_positions: 3
+  max_entries_per_day: 6
+  risk_per_trade_pct: 0.5   # of intraday capital, entry-to-stop
+  max_position_pct: 40      # of intraday capital per position (no leverage)
+  daily_loss_limit_pct: 1.5 # no new entries for the day after losing this much
+
+gates:                      # default paper record needed before live orders
+  swing: {min_trades: 20, min_days: 90, min_t: 1.5}
+  intraday: {min_trades: 60, min_days: 40, min_t: 2.0}
+  live_max_drawdown_pct: 8  # a live strategy losing this % of its capital goes back to paper
+
+strategies:
+  # 1) Cross-asset ETF trend (research: 2016-2026 13.5-15.7%/yr, worst fall 13-16%; Nifty ETF 11.4%, -36%)
+  trend_allocation:
+    enabled: true
+    live: false
+    capital_share: 0.5
+    params: {assets: [NIFTYBEES, JUNIORBEES, MON100, GOLDBEES], sma_days: 200}
+    gate: {count: orders, min_trades: 4, min_days: 60, min_t: null, require_profit: false}  # paper checks execution only
+
+  # 2) Month-end stock momentum, top 10 of the Nifty 50, cash when Nifty < 200-day average
+  #    (research: 2016-2026 ~15-16%/yr, worst fall -25%; flattered by using today's index members)
+  momentum_rotation:
+    enabled: true
+    live: false
+    capital_share: 0.5
+    params: {slots: 10, exit_rank: 20, market_filter: true}
+    gate: {count: orders, min_trades: 10, min_days: 60, min_t: null, require_profit: false}
+
+  # 3) Intraday: buy stock-specific opening gap-downs of 3%+ (worked 2016-2023, absent since 2024).
+  #    PAPER ONLY: the strict default intraday gate applies (60 trades, t >= 2).
+  gap_reversal:
+    enabled: true
+    live: false
+    min_strength: 0.03
+    params: {min_gap: 0.03, market_gap_max: 0.01, stop_atr: 1.0, decide_by: "09:30"}
+
+  # Tested and rejected (kept for reference): fades gaps in both directions
+  gap_fade:
+    enabled: false
+    live: false
+    min_strength: 0.01
+    params: {top_n: 10, min_gap: 0.01, stop_atr: 0.5}

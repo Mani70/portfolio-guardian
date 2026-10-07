@@ -1,0 +1,85 @@
+# Portfolio guardian rules. Copy to config.yaml and edit.
+# Symbols must match the "symbol" field INDstocks returns for your holdings (NSE trading symbols).
+# Run `python -m guardian.main --dry-run --summary` to see exactly which symbols your account returns.
+
+exchange_prefix: NSE      # scrip codes are built as NSE_<security_id>
+
+# Sector map used by max_sector_weight. Anything missing counts as "Unclassified" (never alerted).
+sectors:
+  HCLTECH: IT
+  INFY: IT
+  TCS: IT
+  HDFCBANK: Financials
+  ICICIBANK: Financials
+  YESBANK: Financials
+  TATACAP: Financials
+  SHRIRAMFIN: Financials
+  RELIANCE: Energy & Conglomerate
+  LT: Infrastructure
+  ITC: FMCG
+  WAAREEENER: Solar Equipment
+  SHRIRAMPPS: Real Estate
+
+rules:
+  # --- exit levels agreed on 3 Oct 2026 ---
+  - id: hcl_close_1195
+    type: close_below
+    symbol: HCLTECH
+    timeframe: day
+    level: 1195
+    severity: critical
+    note: "Plan: exit the remaining half on a daily close below ₹1,195."
+
+  - id: waaree_close_2300
+    type: close_below
+    symbol: WAAREEENER
+    timeframe: day
+    level: 2300
+    severity: critical
+    note: "Exit level: below the fresh 52-week low."
+
+  - id: shriram_props_close_60
+    type: close_below
+    symbol: SHRIRAMPPS
+    timeframe: day
+    level: 60
+    severity: critical
+    note: "Exit level: below the March 2026 floor (₹60.57)."
+
+  - id: itc_weekly_close_250
+    type: close_below
+    symbol: ITC
+    timeframe: week
+    level: 250
+    severity: warning
+    note: "Cut half only if Q2 results also show cigarette volumes worsening."
+
+  # --- portfolio hygiene ---
+  - id: max_position_15
+    type: max_position_weight
+    pct: 15
+    note: "Trim or stop adding."
+
+  - id: max_sector_25
+    type: max_sector_weight
+    pct: 25
+    note: "Send new money to other sectors."
+
+  # --- more examples (uncomment to use) ---
+  # - id: reliance_off_high
+  #   type: off_52w_high
+  #   symbol: RELIANCE
+  #   pct: 30
+  #   severity: info
+  #
+  # - id: any_stock_loss_15          # one per stock; there's no wildcard by design
+  #   type: loss_from_cost
+  #   symbol: TCS
+  #   pct: 15
+  #
+  # - id: watch_bharti_breakout      # a stock you don't hold needs a scrip override
+  #   type: price_above
+  #   symbol: BHARTIARTL
+  #   scrip: NSE_10604               # look up SECURITY_ID in the instruments CSV
+  #   level: 2100
+  #   severity: info

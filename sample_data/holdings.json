@@ -1,0 +1,161 @@
+{
+ "status": "success",
+ "data": [
+  {
+   "security_id": "S001",
+   "symbol": "HCLTECH",
+   "isin": "",
+   "total_qty": 41,
+   "used_qty": 0,
+   "avg_price": 1232.77,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 41,
+   "dp_avg_price": 1232.77
+  },
+  {
+   "security_id": "S002",
+   "symbol": "INFY",
+   "isin": "",
+   "total_qty": 48,
+   "used_qty": 0,
+   "avg_price": 1052.46,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 48,
+   "dp_avg_price": 1052.46
+  },
+  {
+   "security_id": "S003",
+   "symbol": "RELIANCE",
+   "isin": "",
+   "total_qty": 42,
+   "used_qty": 0,
+   "avg_price": 1182.58,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 42,
+   "dp_avg_price": 1182.58
+  },
+  {
+   "security_id": "S004",
+   "symbol": "HDFCBANK",
+   "isin": "",
+   "total_qty": 48,
+   "used_qty": 0,
+   "avg_price": 728.57,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 48,
+   "dp_avg_price": 728.57
+  },
+  {
+   "security_id": "S005",
+   "symbol": "TCS",
+   "isin": "",
+   "total_qty": 16,
+   "used_qty": 0,
+   "avg_price": 2283.55,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 16,
+   "dp_avg_price": 2283.55
+  },
+  {
+   "security_id": "S006",
+   "symbol": "LT",
+   "isin": "",
+   "total_qty": 7,
+   "used_qty": 0,
+   "avg_price": 3728.64,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 7,
+   "dp_avg_price": 3728.64
+  },
+  {
+   "security_id": "S007",
+   "symbol": "ITC",
+   "isin": "",
+   "total_qty": 94,
+   "used_qty": 0,
+   "avg_price": 269.05,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 94,
+   "dp_avg_price": 269.05
+  },
+  {
+   "security_id": "S008",
+   "symbol": "ICICIBANK",
+   "isin": "",
+   "total_qty": 16,
+   "used_qty": 0,
+   "avg_price": 1303.21,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 16,
+   "dp_avg_price": 1303.21
+  },
+  {
+   "security_id": "S009",
+   "symbol": "TATACAP",
+   "isin": "",
+   "total_qty": 57,
+   "used_qty": 0,
+   "avg_price": 328.22,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 57,
+   "dp_avg_price": 328.22
+  },
+  {
+   "security_id": "S010",
+   "symbol": "SHRIRAMPPS",
+   "isin": "",
+   "total_qty": 217,
+   "used_qty": 0,
+   "avg_price": 69.14,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 217,
+   "dp_avg_price": 69.14
+  },
+  {
+   "security_id": "S011",
+   "symbol": "WAAREEENER",
+   "isin": "",
+   "total_qty": 6,
+   "used_qty": 0,
+   "avg_price": 2394.85,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 6,
+   "dp_avg_price": 2394.85
+  },
+  {
+   "security_id": "S012",
+   "symbol": "SHRIRAMFIN",
+   "isin": "",
+   "total_qty": 11,
+   "used_qty": 0,
+   "avg_price": 979.4,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 11,
+   "dp_avg_price": 979.4
+  },
+  {
+   "security_id": "S013",
+   "symbol": "YESBANK",
+   "isin": "",
+   "total_qty": 342,
+   "used_qty": 0,
+   "avg_price": 21.15,
+   "t1_qty": 0,
+   "t1_avg_price": 0,
+   "dp_qty": 342,
+   "dp_avg_price": 21.15
+  }
+ ]
+}

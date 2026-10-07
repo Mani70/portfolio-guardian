@@ -1,0 +1,111 @@
+# Backtest settings. Copy to backtest.yaml to customise.
+
+years: 5                    # history to test (downloaded once, then cached in cache/history/)
+capital: 500000             # starting money, ₹
+max_positions: 5            # at most this many stocks at once; each gets equity / max_positions
+stop_atr: 3.0               # protective stop = entry - 3 x ATR(14)
+max_hold: 0                 # force exit after N trading days (0 = no limit)
+out_of_sample_pct: 30       # last 30% of the period is reported separately
+fd_rate: 6.25               # SBI 1-year FD rate, for comparison
+cash_yield: 6.0             # idle cash earns this (liquid fund), in every strategy
+benchmark: NIFTYBEES        # buy-and-hold comparison (Nifty 50 ETF)
+
+# Universe: Nifty 50 constituents as of 2025. Edit to match the current index.
+# Symbols INDstocks can't find are skipped with a warning.
+# Using today's index members to test the past flatters results (survivorship bias).
+universe:
+  - ADANIENT
+  - ADANIPORTS
+  - APOLLOHOSP
+  - ASIANPAINT
+  - AXISBANK
+  - BAJAJ-AUTO
+  - BAJFINANCE
+  - BAJAJFINSV
+  - BEL
+  - BHARTIARTL
+  - CIPLA
+  - COALINDIA
+  - DRREDDY
+  - EICHERMOT
+  - ETERNAL
+  - GRASIM
+  - HCLTECH
+  - HDFCBANK
+  - HDFCLIFE
+  - HINDALCO
+  - HINDUNILVR
+  - ICICIBANK
+  - INDIGO
+  - INFY
+  - ITC
+  - JIOFIN
+  - JSWSTEEL
+  - KOTAKBANK
+  - LT
+  - M&M
+  - MARUTI
+  - MAXHEALTH
+  - NESTLEIND
+  - NTPC
+  - ONGC
+  - POWERGRID
+  - RELIANCE
+  - SBILIFE
+  - SBIN
+  - SHRIRAMFIN
+  - SUNPHARMA
+  - TATACONSUM
+  - TATASTEEL
+  - TCS
+  - TECHM
+  - TITAN
+  - TRENT
+  - ULTRACEMCO
+  - WIPRO
+
+# Delivery costs (approximate; check a recent contract note and adjust)
+costs:
+  brokerage_per_order: 10
+  stt_pct: 0.1
+  exchange_pct: 0.00297
+  sebi_pct: 0.0001
+  stamp_buy_pct: 0.015
+  gst_pct: 18
+  dp_per_sell: 16
+  slippage_pct: 0.05
+
+# Strategy parameters (defaults shown). Changing these to fit the past is how backtests lie:
+# decide on parameters BEFORE looking at out-of-sample results.
+strategies:
+  sma_trend: {fast: 50, slow: 200}
+  donchian_breakout: {entry_n: 50, exit_n: 20, trend: 200}
+  rsi2_pullback: {rsi_n: 2, buy_below: 10, trend: 200, exit_sma: 5}
+  minervini_breakout: {base_days: 20, max_base_pct: 15, vol_mult: 1.4, rs_min: 70}
+  weinstein_stage2: {ma_weeks: 30, vol_mult: 1.5}
+  leader_pullback: {rs_min: 80}
+  momentum_rotation: {slots: 10, exit_rank: 20, every: monthly, market_filter: true}
+  high52_rotation: {slots: 10, exit_rank: 20, every: monthly, market_filter: true}
+  clenow_rotation: {slots: 10, exit_rank: 15, every: weekly}
+  lowvol_rotation: {slots: 10, exit_rank: 20, every: monthly}
+  equal_weight_trend: {sma_days: 200, every: monthly}
+  index_trend: {sma_days: 200, every: monthly}
+
+# Intraday Opening Range Breakout (python -m backtest.intraday). Uses the same universe.
+intraday:
+  days: 180                 # calendar days of 5-minute history to test (if INDstocks has that much)
+  max_positions: 5          # trade the top N stocks by opening relative volume each day
+  min_relvol: 1.0           # opening volume must be at least this multiple of its 14-day average
+  or_minutes: 5             # opening range length
+  stop_atr_frac: 0.10       # stop distance = 10% of the stock's daily ATR (the original study's tight stop)
+  risk_pct: 1.0             # risk 1% of equity per trade
+  leverage: 1.0             # 1 = no intraday margin. Higher magnifies losses as much as gains.
+  exit_time: "15:15"        # square off before the broker's auto square-off
+  costs:
+    brokerage_per_order: 10
+    stt_sell_pct: 0.025
+    exchange_pct: 0.00297
+    sebi_pct: 0.0001
+    stamp_buy_pct: 0.003
+    gst_pct: 18
+    slippage_pct: 0.03
