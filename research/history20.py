@@ -172,6 +172,16 @@ def load_index(hist: Path, keys: List[str]) -> pd.DataFrame:
             if len(df):
                 df["date"] = pd.to_datetime(df["date"])
                 frames.append(df.set_index("date")[["open", "close"]])
+    manual = []                                       # niftyindices.com CSVs saved by hand (research/data/manual)
+    for p in sorted((ROOT / "research" / "data" / "manual").glob("*.csv")):
+        df = pd.read_csv(p, na_values=["-"], thousands=",")
+        df.columns = [str(c).strip().lower() for c in df.columns]
+        if {"index name", "date", "close"} <= set(df.columns) and df["index name"].map(norm).isin(keys).any():
+            df = df[df["index name"].map(norm).isin(keys)]
+            manual.append(pd.DataFrame({"open": df.get("open"), "close": df["close"]}).set_index(
+                pd.to_datetime(df["date"], format="%d %b %Y")))
+    if manual:
+        frames.append(pd.concat(manual).sort_index().loc[lambda x: ~x.index.duplicated()])
     if not frames:
         return pd.DataFrame(columns=["open", "close"])
     out = frames[0]
