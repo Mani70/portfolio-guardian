@@ -12,6 +12,7 @@
   python -m trader.run adopt          # hand your existing stocks to momentum_rotation (asks first)
   python -m trader.run transfer --from trend_allocation --to core_allocation   # move the bot's positions (asks)
   python -m trader.run retest         # autopilot: the yearly re-test of its rule (January; --force any time)
+  python -m trader.run insights       # evening: swing ideas with reasons on Telegram (information only, never traded)
   python -m trader.run report         # P&L per strategy vs the Nifty ETF, charges, tax estimate -> Telegram
   python -m trader.run reconcile      # live positions vs real INDstocks holdings (--fix to correct the record)
   python -m trader.run keep --stock X --qty N   # keep N shares out of the bot's pending sell of X (after 16:00)
@@ -140,8 +141,13 @@ def cmd_check(cfg, args) -> int:
         print("DDPI active: automatic delivery sells are allowed.")
     from .instruments import Instruments
     inst = Instruments.load(client, ROOT / "cache")
-    for s in ("RELIANCE", "NIFTYBEES", "GOLDBEES", "MON100"):
-        print(f"  {s:<10} security_id {inst.security_id(s)}  tick ₹{inst.tick(s)}")
+    traded = {"NIFTYBEES"}
+    for st in build(cfg):
+        if (cfg["strategies"].get(st.name) or {}).get("live") and st.engine == "swing":
+            traded |= set(st.symbols(C.universe(cfg)))
+    for s in sorted(traded):
+        sid = inst.security_id(s)
+        print(f"  {s:<12} security_id {sid or 'MISSING: orders for it would be blocked'}  tick ₹{inst.tick(s)}")
     try:
         from .brokers.indstocks import IndStocksBroker
         b = IndStocksBroker(client)
@@ -153,6 +159,8 @@ def cmd_check(cfg, args) -> int:
     for s in build(cfg):
         sc = cfg["strategies"].get(s.name) or {}
         ok, why, st = paper_gate(jp, s.name, s.engine, cfg)
+        if sc.get("live") and not ok and sc.get("override_gate"):
+            why = f"skipped by override_gate - may trade live ({why})"
         print(f"  {s.name:<20} {s.engine:<8} live={'yes' if sc.get('live') else 'no ':<3} gate: {why}")
     print("\nLive orders also need your static IP whitelisted on indstocks.com/app/api-trading/access-tokens.")
     return 0
@@ -550,6 +558,20 @@ def cmd_transfer(cfg, args) -> int:
         j.close()
 
 
+def cmd_insights(cfg, args) -> int:
+    """Daily swing ideas on Telegram - information only, never traded (trader/insights.py)."""
+    from guardian.notifier import Notifier
+    from .insights import run
+    notifier = Notifier(dry_run=args.dry_run)
+    try:
+        client = _client()                                # only to flag weak stocks among your holdings
+    except Exception as e:                                # noqa: BLE001 - the report works without it
+        log.warning("INDstocks login failed (%s): holdings not checked", e)
+        client = None
+    print(run(notifier.send, client=client))
+    return 0
+
+
 def cmd_retest(cfg, args) -> int:
     """Yearly re-test of the autopilot's rule (trader/retest.py; Addendum 14)."""
     from guardian.notifier import Notifier
@@ -783,7 +805,7 @@ def cmd_reconcile(cfg, args) -> int:
         j.close()
 
 
-COMMANDS = {"check": cmd_check, "adopt": cmd_adopt, "transfer": cmd_transfer, "retest": cmd_retest, "report": cmd_report, "reconcile": cmd_reconcile, "universe": cmd_universe, "holidays": cmd_holidays, "indices": cmd_indices, "split": cmd_split, "keep": cmd_keep, "watch": cmd_watch, "test-order": cmd_test_order, "preview": cmd_preview, "status": cmd_status, "cancel": cmd_cancel, "flatten": cmd_flatten,
+COMMANDS = {"check": cmd_check, "adopt": cmd_adopt, "transfer": cmd_transfer, "retest": cmd_retest, "insights": cmd_insights, "report": cmd_report, "reconcile": cmd_reconcile, "universe": cmd_universe, "holidays": cmd_holidays, "indices": cmd_indices, "split": cmd_split, "keep": cmd_keep, "watch": cmd_watch, "test-order": cmd_test_order, "preview": cmd_preview, "status": cmd_status, "cancel": cmd_cancel, "flatten": cmd_flatten,
             "swing-plan": cmd_swing_plan, "swing-check": cmd_swing_check, "intraday": cmd_intraday}
 
 
