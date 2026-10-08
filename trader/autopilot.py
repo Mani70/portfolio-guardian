@@ -140,8 +140,14 @@ def describe(cfg: dict, root: Path) -> str:
     if not ap:
         return ""
     last = load_state(root).get("last_retest") or {}
-    return f"autopilot: rule {ap['rule']}" + (f" (re-tested {last.get('date')}: {last.get('decision')})" if last
+    line = f"autopilot: rule {ap['rule']}" + (f" (re-tested {last.get('date')}: {last.get('decision')})" if last
                                               else " (not re-tested yet)")
+    vp = ((cfg.get("strategies") or {}).get(ap["core"]) or {}).get("params", {}).get("valuation")
+    if vp:
+        from datetime import date
+        from .valuation import regime
+        line += "; " + regime(vp, date.today())["why"]
+    return line
 
 
 def now_iso_date() -> str:

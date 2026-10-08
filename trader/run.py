@@ -266,6 +266,9 @@ def cmd_swing_plan(cfg, args) -> int:
             log.info("NSE index closes: %s", _update_indices(now.date()))
         except Exception as e:                            # noqa: BLE001 - the filter then uses what it has
             log.warning("NSE index closes not updated: %s", e)
+    if any((sc or {}).get("params", {}).get("valuation") for sc in (cfg.get("strategies") or {}).values()):
+        from .valuation import update
+        update(now.date())                                # best effort: stale or missing data means no tilt
     def plan(eng):
         for s in eng.swing_strategies():       # a strategy that never traded starts now, not at month-end
             s.params["_start_now"] = True

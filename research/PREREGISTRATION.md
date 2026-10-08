@@ -532,3 +532,22 @@ earnings, pledges) are not available for 2006-2026, so no fundamental claim is a
 report's own track record adds the 60-session result beside the 20-session one (Addendum 15's untested observation is
 judged on ideas published from now on), and the header shows the Nifty 50's P/E, P/B and dividend yield with their
 percentile since 1999 (a fact, not a signal).
+
+## Addendum 16a (8 Oct 2026): the owner adopts V1; how it runs live
+
+Decision: the owner adopted V1 (Addendum 16) on 8 Oct 2026. Rule L1 in trader/rulebook.yaml gains the valuation tilt;
+its weights, bands, year-end rebalance and the fallback F (no tilt) are unchanged.
+- Data: the Nifty 50's daily dividend yield from niftyindices.com (cache/valuation/pepb.csv on the server, refreshed
+  before each evening plan and by the insights job; the yearly re-test downloads its own copy).
+- The regime is read at the month's review: the latest dividend yield on or before the anchor day (the review's
+  session if it is the month's last; otherwise the previous month's last day), its percentile among all daily values
+  since Jan 1999 up to that day. At the 16:10 run the day's own value is not out yet, so the previous session's is used.
+  Between reviews (cash sweeps, a review left open) the same anchor gives the same regime.
+- Expensive (percentile <= 20): NIFTYBEES 30, LIQUIDCASE 25. Cheap (>= 80): NIFTYBEES 55, LIQUIDCASE 0. Otherwise
+  L1. A switch is an ordinary rebalance (15 points is beyond the 5-point band).
+- No data, or the latest value more than 10 days older than the anchor: L1's own weights (no tilt), and the evening
+  message says so. The tilt never trades on a guess.
+- The yearly re-test (Addendum 14) evaluates L1 with the tilt (research/allweather16.py's V1), same tests, same
+  benchmark, same Sharpe definition as Addendum 14 (Addendum 16 found the verdicts identical on either definition).
+- Before going live, the engine replay (research/replay_core.py) must match V1's research numbers within 1 point a
+  year in A and B, as Addendum 13 required of L1.

@@ -506,3 +506,12 @@ leverage, which this account cannot and should not use. Bonds instead of the liq
 Part 3 (done, measurement only): the daily report now (1) says it is a price-and-momentum screen that does not judge
 the business, (2) shows the Nifty 50's P/E, P/B and dividend yield with their percentile since 1999 and this test's
 result in one line, and (3) tracks its ideas over 20 and 60 sessions.
+
+## Addendum 16a: V1 adopted and replayed (8 Oct 2026)
+
+The owner adopted V1. Engine replay (research/replay_core.py --tilt: the real CoreAllocation with the rulebook's own
+tilt settings, Engine._allocate, risk checks, paper broker with real costs): A 15.77% / -43.9% (research 15.84% /
+-44.1%), B 15.31% / -27.4% (research 15.34% / -27.4%): within 1 point a year, as required. 304 orders over 20 years
+(L1: 168; the tilt's switches add about 7 trades a year in the years it acts). The yearly re-test now evaluates L1
+with the tilt: on data to Dec 2025 both tests pass (Sharpe 1.08 vs 0.70 and 1.47 vs 1.06; worst fall -44.1% vs
+-59.5%). Today (8 Oct 2026): dividend yield 1.22, above 33% of days since 1999 - neutral, no change to the mix.

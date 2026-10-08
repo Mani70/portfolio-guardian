@@ -258,7 +258,7 @@ Trades only when a strategy that passed the research gives a signal. Most days i
 Strategies (see `research/FINDINGS.md` for the evidence, `trader.example.yaml` for settings):
 | Strategy | Kind | What it does | Status |
 |---|---|---|---|
-| `core_allocation` | long-term, ETFs | Fixed mix NIFTYBEES 45 / JUNIORBEES 15 / MON100 20 / GOLDBEES 10 / LIQUIDCASE 10; month-end check, all back to target when one is 5+ points off and every year-end (partial sells, top-ups) | **passed the 20-year test** (Addendum 13) |
+| `core_allocation` | long-term, ETFs | Fixed mix NIFTYBEES 45 / JUNIORBEES 15 / MON100 20 / GOLDBEES 10 / LIQUIDCASE 10; month-end check, all back to target when one is 5+ points off and every year-end (partial sells, top-ups); valuation tilt on the Nifty 50 share (dividend yield) | **passed the 20-year test** (Addenda 13, 16) |
 | `trend_allocation` | swing, ETFs | Month-end: hold each of NIFTYBEES, JUNIORBEES, MON100, GOLDBEES (¼ each) while above its 200-day average, else cash | failed the 20-year test (Addendum 12) |
 | `momentum_rotation` | swing, stocks | Month-end: top 10 Nifty 50 stocks by risk-adjusted momentum; cash when Nifty < 200-day average | failed the 20-year test (Addendum 12) |
 | `gap_reversal` | intraday | 09:20: buy a stock that opened 3%+ lower on a calm market day; stop 1 ATR; exit 15:15 | **paper only**; no real-money intraday (Addendum 13) |
@@ -371,6 +371,7 @@ autopilot: {enabled: true, reserve: 10000}   # rupees never invested; optional p
 | Money | ALL free cash in the INDstocks account above `reserve`. New deposits are invested within a day or two (evening cash sweep, buys only, from Rs 10,000 or 2% of the portfolio); withdrawals shrink it |
 | Old strategies | Their live holdings are handed to the core at cost on the next run (Telegram says so), then they stop |
 | Rebalancing | Month-end check, 5-point bands, every year-end; buys that need sale money wait a day |
+| Valuation tilt (Addenda 16/16a) | At the month-end review the Nifty 50's dividend yield is ranked against every day since 1999 (niftyindices.com, refreshed before each evening plan): lowest 20% = expensive, NIFTYBEES 30 / LIQUIDCASE 25; highest 20% = cheap, NIFTYBEES 55 / no LIQUIDCASE; otherwise the usual weights. Missing or stale data = no tilt. The health message shows the current reading |
 | Changing the rule | Only the yearly re-test (Saturdays in January, `trader.run retest`): L1 vs the Nifty 50 on the full history and the last 5 years; the pre-set fallback F when L1 fails, back to L1 when it passes. Result on Telegram; state in `trader/state/autopilot.json` |
 | New code | `deploy/oci/autodeploy.py`, weekdays 17:15: GitHub `main` is tested in a separate checkout and deployed only if every test passes; else the running version stays and Telegram says why |
 | Your controls | deposits / withdrawals, `STOP` file, `trader.run cancel`, `mode: paper`, merging pull requests |

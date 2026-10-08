@@ -45,20 +45,30 @@ def frames_from(rets: pd.DataFrame) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--hist", default=str(ROOT / "research" / "data" / "hist"))
+    ap.add_argument("--tilt", action="store_true", help="L1 with the valuation tilt (V1, Addendum 16a)")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
     rets = A.load_sleeves(Path(a.hist))
-    research = A.simulate(rets, A.fixed_mix(rets, A.L1), pd.Timestamp("2005-12-01"))["equity"]
     weights = {SYM[k]: v for k, v in A.L1.items()}
+    params = {"weights": weights}
+    if a.tilt:
+        import allweather16 as W
+        import yaml
+        rule = W.tilt(rets, W.valuation(Path(a.hist)), "div_yield", 20, False)
+        rb = yaml.safe_load((ROOT / "trader" / "rulebook.yaml").read_text(encoding="utf-8"))
+        params["valuation"] = {**rb["rules"]["L1"]["valuation"], "_dir": a.hist}   # the live rule's own settings
+    else:
+        rule = A.fixed_mix(rets, A.L1)
+    research = A.simulate(rets, rule, pd.Timestamp("2005-12-01"))["equity"]
     cfg = C._merge(C.DEFAULTS, {
         "capital": {"swing": A.CAPITAL, "intraday": 0},
         "limits": {"max_orders_per_day": 100},
         "strategies": {"core": {"enabled": True, "class": "core_allocation", "max_order_value": 1e12,
-                                "params": {"weights": weights}}}})
+                                "params": params}}})
     cfg["_path"] = "replay"
     daily = frames_from(rets)
     market = ReplayMarket(daily, {}, close_fill=set(daily))
-    strat = CoreAllocation("core", {"weights": weights})
+    strat = CoreAllocation("core", params)
     strat.sessions = market.sessions
     tmp = Path(tempfile.mkdtemp())
     j = Journal(tmp / "replay.db", "paper")
@@ -84,7 +94,8 @@ def main(argv=None) -> int:
     orders = j.load_orders()
     print(f"\n  engine: {len(orders)} orders, {len(j.trades())} closed trades (partial sells), "
           f"final value Rs {engine.iloc[-1]:,.0f}")
-    print(f"  -> replay {'MATCHES' if ok else 'DOES NOT MATCH'} the research within 1 point a year (Addendum 13)")
+    print(f"  -> replay {'MATCHES' if ok else 'DOES NOT MATCH'} the research within 1 point a year "
+          f"({'Addendum 16a, V1' if a.tilt else 'Addendum 13, L1'})")
     return 0 if ok else 1
 
 

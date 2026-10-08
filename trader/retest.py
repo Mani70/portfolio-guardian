@@ -3,8 +3,9 @@
   python -m trader.run retest            # January (scheduled: Saturdays in January, once a year)
   python -m trader.run retest --force    # any time, e.g. to see where the tests stand (still applies the rule)
 
-Updates the research data (NSE bhavcopy, corporate actions, niftyindices total-return and 1D-rate histories) up to
-the last session of December, re-runs the Addendum 13 simulation unchanged, and applies the pre-registered rule:
+Updates the research data (NSE bhavcopy, corporate actions, niftyindices total-return, 1D-rate and valuation histories)
+up to the last session of December, re-runs the Addendum 13 simulation (L1 with its Addendum 16a valuation tilt),
+and applies the pre-registered rule:
   test 1 (Jan 2006 to the end): L1's Sharpe above the Nifty 50 TRI's AND its worst fall shallower;
   test 2 (the last 5 calendar years): L1's Sharpe above the Nifty 50 TRI's.
   F when test 1 fails, or test 2 fails in two consecutive re-tests; back to L1 when both pass.
@@ -45,8 +46,9 @@ def last_december_session(rets: pd.DataFrame, year: int) -> Optional[pd.Timestam
     return idx[-1] if len(idx) else None
 
 
-def evaluate(hist: Path, year: int) -> dict:
-    """The Addendum 13 simulation, unchanged, on data to the last session of December `year`."""
+def evaluate(hist: Path, year: int, tilt: bool = False) -> dict:
+    """The Addendum 13 simulation, unchanged, on data to the last session of December `year`. tilt: L1 with the
+    valuation tilt (Addendum 16a: research/allweather16.py's V1, Nifty 50 dividend yield from hist/pepb.csv)."""
     root = Path(__file__).resolve().parent.parent
     sys.path.insert(0, str(root / "research"))
     import allocation20 as A                                     # noqa: E402 - research code, loaded on demand
@@ -58,7 +60,15 @@ def evaluate(hist: Path, year: int) -> dict:
     rets = rets.loc[:end]
     start = pd.Timestamp("2005-12-01")
     bench = A.simulate(rets, A.hold_one("N50"), start)["equity"]
-    l1 = A.simulate(rets, A.fixed_mix(rets, A.L1), start)["equity"]
+    if tilt:
+        import allweather16 as W                                 # noqa: E402
+        val = W.valuation(hist)
+        if val.index[-1] < end - pd.Timedelta(days=10):
+            raise RuntimeError(f"the valuation data does not reach the end of December {year}")
+        rule = W.tilt(rets, val.loc[:end], "div_yield", 20, False)
+    else:
+        rule = A.fixed_mix(rets, A.L1)
+    l1 = A.simulate(rets, rule, start)["equity"]
     out = {"end": f"{end:%Y-%m-%d}"}
     for tag, lo in (("full", pd.Timestamp("2006-01-01")), ("last5", pd.Timestamp(f"{year - 4}-01-01"))):
         b, x = bench.loc[lo:], l1.loc[lo:]
@@ -89,7 +99,9 @@ def run(root: Path, notify=None, update: bool = True, force: bool = False, today
     try:
         if update:
             update_data(root)
-        res = evaluate(root / "research" / "data" / "hist", year)
+        from .autopilot import rulebook
+        tilt = bool(((rulebook(root).get("rules") or {}).get("L1") or {}).get("valuation"))
+        res = evaluate(root / "research" / "data" / "hist", year, tilt=tilt)
     except Exception as e:                                       # noqa: BLE001 - no data, no change
         msg = f"Autopilot re-test for {year} could not run ({str(e)[:200]}). Nothing changed: rule " \
               f"{state.get('active') or 'L1'} stays."

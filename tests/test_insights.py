@@ -148,9 +148,9 @@ def test_valuation_line_and_both_track_records(tmp_path):
     pd.DataFrame({"date": days.strftime("%Y-%m-%d"), "index": "Nifty 50", "pe": pe, "pb": pe / 6,
                   "div_yield": 30 / pe}).to_csv((tmp_path / "valuation").mkdir() or tmp_path / "valuation" / "pepb.csv",
                                                 index=False)
-    line = I.valuation_line(tmp_path, date(2021, 7, 1), update=False)
+    line = I.valuation_line(date(2021, 7, 1), update=False, vdir=tmp_path / "valuation")
     assert "P/E 15.0 (above 0% of days since 1999)" in line and "dividend yield 2.00% (above 100%" in line
-    assert I.valuation_line(tmp_path / "none", date(2021, 7, 1), update=False) == ""
+    assert I.valuation_line(date(2021, 7, 1), update=False, vdir=tmp_path / "none") == ""
     p = _panel()
     rep = I.screen(I.facts(p), I.market(p), {})
     I.record(I.Report(p["close"].index[-70], rep.market, rep.buys, rep.avoids, [], [], 0, 0), tmp_path / "ideas.csv")

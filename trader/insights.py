@@ -579,30 +579,23 @@ def track_records(panel: Dict[str, pd.DataFrame], path: Path, horizons=(20, 60))
 
 
 # ------------------------------------------------------------------ market valuation (Addendum 16: a fact, not a signal)
-def valuation_line(store: Path, today: date, update: bool = True) -> str:
+def valuation_line(today: date, update: bool = True, vdir: Optional[Path] = None) -> str:
     """The Nifty 50's P/E, P/B and dividend yield (niftyindices.com) and where each stands among its daily values
-    since 1999. Best effort: empty when the data cannot be had."""
-    vdir = store / "valuation"
+    since 1999 (trader/valuation.py). Best effort: empty when the data cannot be had."""
+    from . import valuation as V
+    vdir = Path(vdir or V.DIR)
     if update:
-        try:
-            DH, DN = _research()
-            DH.index_history(DN.Store(vdir), 1999, today.year, pepb=True)
-        except Exception as e:                                      # noqa: BLE001 - the report goes out regardless
-            log.warning("valuation history unavailable: %s", e)
-    p = vdir / "pepb.csv"
-    if not p.exists():
+        V.update(today, vdir)
+    v = V.load(vdir)
+    if v is None or len(v.dropna()) < 250:
         return ""
-    v = pd.read_csv(p)
-    v = v.assign(date=pd.to_datetime(v["date"])).drop_duplicates("date", keep="last").set_index("date").sort_index()
-    v = v[["pe", "pb", "div_yield"]].astype(float).dropna()
-    if len(v) < 250:
-        return ""
+    v = v.dropna()
     last = v.iloc[-1]
     pct = {k: int(round((v[k] <= last[k]).mean() * 100)) for k in v.columns}
     return (f"Nifty 50 valuation ({v.index[-1]:%d %b}): P/E {last.pe:.1f} (above {pct['pe']}% of days since 1999), "
             f"P/B {last.pb:.2f} (above {pct['pb']}%), dividend yield {last.div_yield:.2f}% (above {pct['div_yield']}%; "
-            "a higher yield = cheaper). Context only: in the 20-year test, timing the market on valuation "
-            + VALUATION_TESTED)
+            "a higher yield = cheaper). Your long-term core cuts its Nifty 50 share when the yield is in its lowest "
+            "20% and raises it in its highest 20%; in the 20-year test that " + VALUATION_TESTED)
 
 
 # ------------------------------------------------------------------ the job
@@ -640,7 +633,7 @@ def run(notify, client=None, today: Optional[date] = None, update: bool = True, 
             log.warning("holdings unavailable: %s", e)
     rep = screen(df, mkt, flags, holdings)
     track = track_records(panel, store / "ideas.csv")
-    val = valuation_line(store, today, update=update)
+    val = valuation_line(today, update=update)
     for m in compose(rep, flags, track, filings_window(store, today), val):
         notify(m)
     record(rep, store / "ideas.csv")
