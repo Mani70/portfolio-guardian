@@ -1,0 +1,29 @@
+# The autopilot's rules (research/PREREGISTRATION.md Addendum 14; evidence: research/FINDINGS.md Addenda 12-13).
+# With `autopilot: {enabled: true}` in trader.yaml the bot runs these and nothing else: trader.yaml's own
+# `strategies:` are ignored. Changed only by new research (a pull request) - and the yearly re-test
+# (`trader.run retest`) may switch `active` between the rules below, as Addendum 14 fixes; its choice is kept in
+# trader/state/autopilot.json.
+
+active: L1                  # the rule in force unless the yearly re-test has switched to another one
+core_name: core             # the strategy name in the journal, the same whichever rule is active
+
+rules:
+  L1:                       # Addendum 13: 14.9% / -48% (2006-15), 15.2% / -27% (2016-26), with dividends
+    weights: {NIFTYBEES: 0.45, JUNIORBEES: 0.15, MON100: 0.20, GOLDBEES: 0.10, LIQUIDCASE: 0.10}
+    band: 0.05
+    year_end: true
+    min_trade: 2000
+  F:                        # Addendum 14 fallback, if the yearly re-test finds L1's edge gone
+    weights: {NIFTYBEES: 0.80, LIQUIDCASE: 0.20}
+    band: 0.05
+    year_end: true
+    min_trade: 2000
+
+# failed the 20-year test (Addendum 12): their live holdings are handed to the core at cost, then they stop
+retired: [trend_allocation, momentum_rotation]
+
+# kept on paper only, for the record (no real-money intraday: Addendum 13)
+paper_only:
+  gap_reversal:
+    min_strength: 0.03
+    params: {min_gap: 0.03, market_gap_max: 0.01, stop_atr: 1.0, decide_by: "09:30"}

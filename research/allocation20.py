@@ -46,7 +46,7 @@ def load_sleeves(hist: Path) -> pd.DataFrame:
         cols[k] = s
     lv = pd.DataFrame(cols)
     print("Loading ETF prices (bhavcopy, corporate actions as Addendum 12a/12b) ...", flush=True)
-    panel = H.load_panel(hist, fields=("open", "high", "low", "close", "prevclose", "value"))
+    panel = H.load_panel(hist, fields=("open", "high", "low", "close", "prevclose", "value"), symbols=list(ETF_SYM.values()))
     official = H.official_events(hist, H.symbol_changes(hist))
     H.adjust_prices(panel, official, use_detection=False)             # the four live ETFs are always detected
     for k, sym in ETF_SYM.items():
@@ -55,7 +55,13 @@ def load_sleeves(hist: Path) -> pd.DataFrame:
     lv = lv.loc[lv.index >= pd.Timestamp("2005-01-01")]
     days = lv.index.to_series().diff().dt.days.fillna(1).clip(lower=1)
     rate = np.array([H.overnight(d) - 0.23 for d in lv.index]) / 100
-    lv["LIQ"] = np.cumprod(1 + rate * days.to_numpy() / 365)          # accrues over weekends and holidays too
+    growth = 1 + rate * days.to_numpy() / 365                         # accrues over weekends and holidays too
+    one_d = overnight_index(hist)                                     # Addendum 14: after 2025, NSE's 1D rate index
+    if one_d is not None:
+        r1 = one_d.reindex(lv.index).ffill().pct_change(fill_method=None)
+        later = (lv.index > RATE_PATH_END) & r1.notna().to_numpy()
+        growth[later] = 1 + r1.to_numpy()[later] - 0.23 / 100 * days.to_numpy()[later] / 365
+    lv["LIQ"] = np.cumprod(growth)
     filled = lv.ffill()                                               # a gap's move lands on the next priced day
     rets = filled.pct_change(fill_method=None)
     for k in lv.columns:
@@ -64,6 +70,21 @@ def load_sleeves(hist: Path) -> pd.DataFrame:
     for k, e in EXPENSE.items():                                      # expense ratio, charged daily
         rets[k] = rets[k] - e / 100 * days / 365
     return rets
+
+
+RATE_PATH_END = pd.Timestamp("2025-12-31")                           # the hand-entered overnight rates end here
+
+
+def overnight_index(hist: Path) -> Optional[pd.Series]:
+    """NSE's Nifty 1D Rate Index (overnight money market, total return) from index_history.csv, if downloaded."""
+    p = hist / "index_history.csv"
+    if not p.exists():
+        return None
+    df = pd.read_csv(p, usecols=["date", "index", "close"])
+    df = df[df["index"].str.upper() == "NIFTY 1D RATE INDEX"]
+    if df.empty:
+        return None
+    return df.assign(date=pd.to_datetime(df["date"])).drop_duplicates("date").set_index("date")["close"].sort_index()
 
 
 def month_ends(idx: pd.DatetimeIndex) -> set:

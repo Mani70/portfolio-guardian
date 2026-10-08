@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple
 from .models import BUY, CNC, INTRADAY, OrderRequest, Position
 
 
+ALL_CASH = 1e12                                    # live plan when capital.all_cash: sizing then follows the account
 TOPUP_CLASSES = {"core_allocation"}              # strategies that may buy more of an ETF they already hold
 
 
@@ -38,7 +39,10 @@ class Risk:
         return (self.root / self.lim["kill_switch_file"]).exists()
 
     def capital(self, engine: str) -> float:
-        return float(self.cfg["capital"].get(engine, 0))
+        cap = self.cfg["capital"]
+        if engine == "swing" and cap.get("all_cash") and getattr(self.j, "mode", "") == "live":
+            return ALL_CASH                              # autopilot: the whole account, scaled to what it holds
+        return float(cap.get(engine, 0))
 
     def account_scale(self, engine: str = "swing") -> float:
         """1.0 normally; below 1 when the account holds less than the live swing plan."""
@@ -48,6 +52,8 @@ class Risk:
 
     def strategy_capital(self, name: str, engine: str) -> float:
         """The planned capital, scaled down to the money in the account when that is less (live, swing)."""
+        if engine == "swing" and self.capital("swing") >= ALL_CASH and self.account_equity is None:
+            return 0.0                                   # all_cash but the account couldn't be read: size nothing
         return self.planned_capital(name, engine) * self.account_scale(engine)
 
     def planned_capital(self, name: str, engine: str) -> float:

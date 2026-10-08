@@ -548,7 +548,7 @@ class Engine:
                       if o.req.strategy in names and o.status in (NEW, OPEN, PARTIAL))
         self.risk.account_equity = usable + held + pending
         self.risk.live_plan = sum(self.risk.planned_capital(s.name, "swing") for s in self.swing_strategies())
-        if self.risk.account_scale() < 0.95:          # the 3% after-market headroom alone is not worth a note
+        if self.risk.account_scale() < 0.95 and not capcfg.get("all_cash"):   # all_cash: the account IS the plan
             return (f"Account: ₹{free:,.0f} free + ₹{held + pending:,.0f} invested; live strategies are sized at "
                     f"{self.risk.account_scale():.0%} of their ₹{self.risk.live_plan:,.0f} plan.")
         return None
@@ -704,16 +704,15 @@ class Engine:
         return placed
 
     def _allocate(self, strat, frames, d: date, now: datetime, band: float, positions) -> Tuple[List[Order], List[str]]:
-        """A target-weight strategy's review: when its mix has drifted (strat.needs_rebalance), sell what is over
-        target (part of a position) and buy what is under (topping up). Buys that need the money from tonight's sells
-        wait for it: the review then stays open and runs again the next evening, when the sales have settled, until
-        nothing is left to do. A strategy winding down (demoted / not allowed live) sells everything."""
+        """A target-weight strategy's evening. On its review (month-end, or a review left open), when the mix has
+        drifted (strat.needs_rebalance): sell what is over target (part of a position) and buy what is under (topping
+        up). Buys that need the money from tonight's sells wait for it: the review stays open and runs again the next
+        evening, when the sales have settled. On other evenings, idle cash above the sweep threshold (new money) buys
+        what is under target - buys only. A strategy winding down (demoted / not allowed live) sells everything."""
         placed: List[Order] = []
         lines: List[str] = []
         exit_only = strat in self.exit_only
         period = strat.due_period(d)
-        if period is None and not exit_only:
-            return placed, lines
         mine = {p.symbol: p for p in positions if p.strategy == strat.name and p.product == CNC}
         if exit_only and not mine:
             return placed, lines
@@ -726,9 +725,18 @@ class Engine:
             return placed, lines
         target = {} if exit_only else strat.targets(frames, d)
         if not exit_only and not target:
-            self._say(f"{strat.name}: no prices today for its ETFs; review tried again tomorrow", force=True)
+            if period is not None:
+                self._say(f"{strat.name}: no prices today for its ETFs; review tried again tomorrow", force=True)
             return placed, lines
         current = {s: v / total for s, v in vals.items()}
+        if period is None and not exit_only:            # not a review evening: only new money is invested
+            idle = total - sum(vals.values())
+            sweep = max(float(strat.params.get("sweep_min", 10_000)), float(strat.params.get("sweep_pct", 0.02)) * total)
+            if idle < sweep or self.j.active_orders(strat.name, product=CNC) or self.sizing_failed:
+                return placed, lines
+            self._buy_to_target(strat, frames, target, vals, total, current, f"invest ₹{idle:,.0f} new cash", now,
+                                band, positions, False, placed, lines)
+            return placed, lines
         why = "winding down" if exit_only else strat.needs_rebalance(current, target, d, str(period).endswith("-12"))
         strat._pending_period = period
         if why is None:
@@ -764,7 +772,18 @@ class Engine:
                 placed.append(o)
                 selling = selling or o.status in (NEW, OPEN, PARTIAL, FILLED)
                 lines.append(f"SELL {qty} {s} ({sig.reason})")
-        for s, w in sorted(target.items(), key=lambda kv: -kv[1]):     # then buys: what is under target
+        trouble |= self._buy_to_target(strat, frames, target, vals, total, current, why, now, band, positions,
+                                       selling, placed, lines)
+        strat.commit(ok=not trouble)
+        return placed, lines
+
+    def _buy_to_target(self, strat, frames, target, vals, total, current, why, now, band, positions, selling,
+                       placed, lines) -> bool:
+        """Buy each ETF that is under its target weight up to it. True if a buy could not go out in full (waiting
+        for money): the caller keeps the review open."""
+        min_trade = float(strat.params.get("min_trade", 2000))
+        trouble = False
+        for s, w in sorted(target.items(), key=lambda kv: -kv[1]):
             px = float(frames[s]["close"].iloc[-1])
             short = w * total - vals.get(s, 0.0)
             if short < min_trade:
@@ -780,8 +799,7 @@ class Engine:
             if o:
                 placed.append(o)
                 lines.append(f"BUY {o.req.qty} {s} ~₹{px:,.2f} ({sig.reason})")
-        strat.commit(ok=not trouble)
-        return placed, lines
+        return trouble
 
     def _unpark(self, park_pos: Position, frames, now: datetime, band: float, positions) -> Optional[Order]:
         pdf = frames.get(park_pos.symbol)

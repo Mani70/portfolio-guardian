@@ -41,7 +41,7 @@ NI_URL = f"{NI_BASE}/getHistoricaldatatabletoString"
 NI_TRI_URL = f"{NI_BASE}/getTotalReturnIndexString"
 NI_TRI = ["NIFTY 50", "NIFTY NEXT 50", "NIFTY200 MOMENTUM 30", "NIFTY 200"]   # Addendum 13: dividends included
 NI_INDICES = ["NIFTY 50", "NIFTY NEXT 50", "NIFTY100 QUALITY 30", "NIFTY 100", "NIFTY100 LOW VOLATILITY 30",
-              "NIFTY50 VALUE 20", "NIFTY200 MOMENTUM 30", "NIFTY MIDCAP 100"]
+              "NIFTY50 VALUE 20", "NIFTY200 MOMENTUM 30", "NIFTY MIDCAP 100", "NIFTY 1D RATE INDEX"]
 
 
 def urls_equities(d: date) -> List[str]:
@@ -215,7 +215,7 @@ def index_history(store: Store, start_year: int, end_year: int, tri: bool = Fals
                 refused += 1
                 if r is not None:
                     print(f"  niftyindices {name} {y}: HTTP {r.status_code}, no rows", flush=True)
-            if rows or y < date.today().year:                     # an empty current year is retried next run
+            if y < date.today().year:                             # the current year is fetched again next run
                 store.done.setdefault(src, []).append(key)
             time.sleep(0.5)
             tmp = store.done_path.with_suffix(".tmp")
