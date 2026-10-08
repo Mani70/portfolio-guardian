@@ -362,3 +362,22 @@ The owner chose this replacement (8 Oct 2026):
 3. The four live ETFs: official events where the file lists them; otherwise the detection rule in every year.
 4. Index closes and opens for Oct 2014 on come from NSE's daily index files (the same files as before Oct 2014), so
    the Quality 30 check and the intraday Nifty-open filter have data for the whole of period B.
+
+## Addendum 12b (8 Oct 2026): data fixes found while checking Addendum 12a's prices
+
+Order of events, stated plainly: a run with 12a's code produced strategy numbers; before accepting them, the
+detection check's "false" events turned out to be real 2010 splits (M&M, KOTAKBANK, LUPIN) that the code did not
+read from the Bc files. Those numbers are discarded. Fixes, none of which touches a rule, parameter or pass bar:
+1. Wording: 2010 files write "FV SPLIT RS.10 TO RS.5" (no "FROM"); others "FVSPLT FRMRS 100 TO RE 1",
+   "BONUS1:2/FVSPLIT10TO2" (bonus and split on one ex-date: the product), "BONUS- 1:2", "BON-1:1". All are read now;
+   special dividends ("SPL RS 5"), debenture and preference-share bonuses are not price events and stay out.
+2. A revised ex-date (the same action listed again within 30 days in a later file) replaces the earlier one
+   instead of being applied twice (NBCC bonus, Feb 2017).
+3. Check, applied to every case: after adjustment, every overnight move below 0.6x or above 1.7x of a stock while it
+   was in the monthly top 100 (2010 on) was looked up. Corrected where a corporate action explains it: INFY bonus
+   1:1 on 15 Jun 2015 (Bc text cut off), SHRIRAMFIN split 10 to 2 on 10 Jan 2025 (not in the Bc files), and three
+   demergers listed as "SCHEME OF ARRANGEMENT" (ADANIENT 3 Jun 2015, ABIRLANUVO 20 Jan 2016, CGPOWER 15 Mar 2016),
+   which get 12a's demerger treatment - except ADANIENT, which opened at the old price (573.30 vs 637.00 the day
+   before) and closed at 109.75, so its factor is the ex-date close / previous close (0.172). Every other demerger
+   among the tested stocks opened and closed at a similar gap (checked, 38 events). Left as real: 63MOONS 2013, DHFL 2018, Infibeam 2018, JETAIRWAYS 2019,
+   YESBANK 2020. Before 2010 the detection rule decides, as pre-registered.

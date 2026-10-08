@@ -124,25 +124,48 @@ def load_panel(hist: Path, fields=("open", "high", "low", "close", "prevclose", 
 # ---------------------------------------------------------------- corporate actions (Addendum 12a)
 SPLIT_K = [2 / 3, 1 / 2, 2 / 5, 1 / 3, 1 / 4, 1 / 5, 1 / 10]
 OFFICIAL_FROM = pd.Timestamp("2010-01-01")
-_BONUS = re.compile(r"BONUS\s*(\d+)\s*:\s*(\d+)")
-_FV = re.compile(r"\bFR(?:O)?M\s*R[SE]\.?\s*([\d.]+)\D*?\bTO\s*R[SE]\.?\s*([\d.]+)")
+_BONUS = re.compile(r"\bBON(?:US)?(?:\s*ISSUE)?[\s:@-]*(\d+)\s*:\s*(\d+)")      # not "BONUS DEB 1:1" (debentures)
+_SPLIT_WORD = re.compile(r"FACE\s*VALUE|SUB-?\s*DIV|CONSOL|SPLI?T|SPLT|SPL(?!\s*-?\s*DI?V)|\bFV")
+_FROM_TO = re.compile(r"(\d+(?:\.\d+)?)\D{0,25}?TO\D{0,12}?(\d+(?:\.\d+)?)")
 
 
 def purpose_factor(purpose: str) -> Optional[float]:
-    """Price factor of one corporate action (prices before the ex-date are multiplied by it): BONUS a:b -> b/(a+b);
-    face value FROM x TO y -> y/x; DEMERGER -> nan (taken from the ex-date's opening gap); anything else -> None."""
+    """Price factor of one corporate-action line (prices before the ex-date are multiplied by it): BONUS a:b ->
+    b/(a+b); face value x TO y (split or consolidation) -> y/x; both in one line -> the product; DEMERGER -> nan (taken
+    from the ex-date's opening gap); anything else -> None. NSE's wording varies: "FVSPLT FRM RS 10 TO RE 1",
+    "FV SPLIT RS.10 TO RS.5", "BONUS1:2/FVSPLIT10TO2", "BON 1:1/SPLIT RS10 TO RS2"."""
     p = " ".join(str(purpose).upper().split())
+    f, found = 1.0, False
     m = _BONUS.search(p)
     if m and int(m.group(1)) > 0 and int(m.group(2)) > 0:
-        return int(m.group(2)) / (int(m.group(1)) + int(m.group(2)))
-    m = _FV.search(p)
-    if m and re.search(r"SPL|SUB|CONSOL|\bFV\b|FACE", p):
-        x, y = float(m.group(1)), float(m.group(2))
-        if x > 0 and y > 0 and x != y:
-            return y / x
+        f *= int(m.group(2)) / (int(m.group(1)) + int(m.group(2)))
+        found = True
+    w = _SPLIT_WORD.search(_BONUS.sub(" ", p))
+    if w:
+        rest = _BONUS.sub(" ", p)[w.start():]
+        m = _FROM_TO.search(rest)
+        if m:
+            x, y = float(m.group(1)), float(m.group(2))
+            if x > 0 and y > 0 and x != y:
+                f *= y / x
+                found = True
+    if found:
+        return f
     if "DEMERGER" in p:
         return float("nan")
     return None
+
+
+# Addendum 12b: overnight moves below 0.6x or above 1.7x in the tested stocks, 2010 on, that a corporate action
+# explains but the Bc files don't (prices before the ex-date x factor; nan = demerger, the opening gap)
+MANUAL_EVENTS = [
+    ("INFY", "2015-06-15", 0.5, "BONUS 1:1 (Bc text cut off: 'AGM/DIV-RS 29.50/BONUS')"),
+    ("SHRIRAMFIN", "2025-01-10", 0.2, "FV split Rs 10 to Rs 2 (not in the Bc files)"),
+    ("ADANIENT", "2015-06-03", 109.75 / 637.00, "SCHEME OF ARRANGEMENT: demerger; it opened at the old price "
+                                                "(573.30), so the ex-date close is used"),
+    ("ABIRLANUVO", "2016-01-20", float("nan"), "SCHEME OF ARRANGEMENT: demerger"),
+    ("CGPOWER", "2016-03-15", float("nan"), "SCHEME OF ARRANGEMENT (as CROMPGREAV): demerger"),
+]
 
 
 def official_events(hist: Path, changes: Dict[str, tuple]) -> pd.DataFrame:
@@ -162,8 +185,19 @@ def official_events(hist: Path, changes: Dict[str, tuple]) -> pd.DataFrame:
         return final_symbol(r.symbol, changes) if ch is not None and r.ex_date < ch[1] else r.symbol
     if changes and len(ca):
         ca["symbol"] = [rename(r) for r in ca.itertuples()]
-    # the same split listed twice (revised wording) counts once
-    return ca.drop_duplicates(["symbol", "ex_date", "factor"])[["symbol", "ex_date", "factor", "purpose"]]
+    # the same split listed twice (revised wording) counts once; a revised ex-date (the same action again within 30
+    # days in a later file) replaces the earlier one
+    ca = ca.sort_values("file_date").drop_duplicates(["symbol", "ex_date", "factor"], keep="last")
+    ca["fkey"] = ca["factor"].fillna(-1.0)
+    keep = []
+    for idx, r in zip(ca.index, ca.itertuples()):
+        later = ca[(ca.symbol == r.symbol) & (ca.fkey == r.fkey) & (ca.file_date > r.file_date)]
+        keep.append(idx if not ((later.ex_date - r.ex_date).abs() <= pd.Timedelta(days=30)).any() else None)
+    ca = ca.loc[[k for k in keep if k is not None]][["symbol", "ex_date", "factor", "purpose"]]
+    manual = pd.DataFrame(MANUAL_EVENTS, columns=["symbol", "ex_date", "factor", "purpose"])
+    manual["ex_date"] = pd.to_datetime(manual["ex_date"])
+    ca = pd.concat([ca, manual], ignore_index=True)
+    return ca.sort_values(["symbol", "ex_date"]).reset_index(drop=True)
 
 
 def detected_events(o: pd.DataFrame, c: pd.DataFrame) -> pd.DataFrame:
