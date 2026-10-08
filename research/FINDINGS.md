@@ -341,3 +341,46 @@ Conclusions:
   buys) but not robust across thresholds, universes and horizons. Not adopted; it would be a separate event
   strategy needing survivorship-free price data.
 - News and sentiment can't be tested historically; nothing in this data suggests a reaction rule would beat waiting.
+
+## Addendum 12: 20 years, survivorship-free (8 Oct 2026; pre-registered, with 12a/12b data fixes; research/history20.py)
+
+Data: NSE bhavcopy 3 Jan 2005 - 6 Oct 2026 (5,372 sessions, 4,015 symbols); universe = each month's 50 most traded
+stocks (no survivorship bias); 1,311 bonuses, splits and demergers applied from NSE's own corporate-action files.
+Not the "previous close" method Addendum 12 planned: NSE does not adjust it (12a). The pre-2010 detection rule
+FAILED its validation (recall 73.4%, precision 97.1%, bar 90%/90%: big ex-date moves push it outside its band), so
+as pre-registered **period A is Jan 2011 - Dec 2015** (5 years, not 10; 2008 is not in the test). B = 2016 - Oct 2026.
+No dividends anywhere (prices only; about 1-1.5% a year understated, the same for every line).
+
+| CAGR / worst fall / Sharpe | A: 2011-2015 | B: 2016-2026 |
+|---|---|---|
+| NIFTYBEES held (momentum benchmark) | 5.3% / -25.4% / 0.41 | 11.5% / -36.3% / 0.83 |
+| Momentum, live rule (top 10 of the 50 most traded) | 4.0% / -22.0% / 0.35 | 8.4% / -31.1% / 0.55 |
+| neighbour: top 10 of the 100 most traded | 14.3% / -18.0% / 0.91 | 11.8% / -33.4% / 0.71 |
+| (a) 3 tranches | 1.6% / -16.7% / 0.19 | 7.4% / -34.4% / 0.51 |
+| (b) + Quality 30 check | 4.0% / -22.0% / 0.35 | 9.9% / -23.3% / 0.65 |
+| live rule with the engine's buy delay | 3.5% / -23.7% / 0.32 | 7.9% / -31.9% / 0.53 |
+| (c) idle cash parked (rate 1 point lower) | 6.0% / -22.6% / 0.49 | 8.7% / -31.7% / 0.57 |
+| Hold all four ETFs (ETF trend benchmark) | 13.3% / -7.3% / 1.25 | 19.5% / -26.2% / 1.31 |
+| ETF trend, live rule | 9.5% / -6.9% / 1.12 | 12.7% / -14.3% / 1.27 |
+
+Verdicts against the pre-registered bars:
+- **Momentum (live rule): FAILS** in A (Sharpe 0.35 vs 0.41). It also trails the Nifty ETF in B. Without the
+  survivorship bias of today's Nifty 50 list (Addendum 10: 15.9% a year in 2016-2026), the same rule makes 8.4%.
+  The result also swings with the universe size (top 100: 14.3% in A, 11.8% in B), so even its sign is not settled.
+  (a) tranches: not adopted. (b) Quality 30 check: not adopted (identical in A; better in B, Sharpe 0.65 vs 0.55).
+  (c) parking passes the variant bar against the live rule (Sharpe 0.49 vs 0.32 in A, 0.57 vs 0.53 in B), mostly
+  from 7-9% overnight rates in 2011-2015 while momentum sat in cash; it still trails holding NIFTYBEES in B.
+- **ETF trend (live rule): FAILS** in A (Sharpe 1.12 vs 1.25; worst fall -6.9% vs -7.3%). In B it gives up 7 points
+  a year against holding the four ETFs for a much smaller worst fall (-14% vs -26%), Sharpe about equal.
+- **Intraday gap reversal (the paper rule): not traded** - positive in A and B but negative in the last 3 years
+  (-0.09% a day, t -0.4), as the 5-minute research found. Neighbours (2%, 4% gaps): the same.
+- **Gap fade both ways (1%+ gaps, stop 0.5 ATR, top 10): passes the bar on paper, NOT credible.** +0.14% a day
+  (t 3.2) in the last 3 years from daily bars, but the 5-minute data for Jun 2024 - Oct 2026 gives -0.07% a trade
+  (t -1.2) for gap fades. Daily bars assume a fill at NSE's official open (the pre-open auction price) and cannot
+  tell whether the stop or the close came first; 0.5 ATR stops make that matter. Not to be traded without a
+  5-minute test of this exact rule.
+
+Conclusion: by the bars fixed before the data was seen, no strategy family passes. Read plainly, 2011-2026 says
+holding the Nifty ETF (or the four ETFs) did as well as or better than either live rule after costs, and the
+earlier 15-16% momentum figure came from testing on today's winners. Per Addendum 12 no rulebook is written and
+nothing is switched to live on this evidence; what to do with the paper strategies is the owner's decision.

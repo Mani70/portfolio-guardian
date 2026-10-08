@@ -335,3 +335,49 @@ Pass bars:
 Afterwards: the passing rules are written into one rulebook (docs), each live change is replayed through the real
 engine over the 20 years to confirm the code matches the research, and the owner switches it on. No further paper
 months are required for rules that pass here; paper (lab) runs continue only as a live plumbing check.
+
+## Addendum 12a (8 Oct 2026, after a first run showed the price adjustment is wrong; before any valid result is seen)
+
+What went wrong: NSE's bhavcopy "previous close" is NOT adjusted on an ex-date (RELIANCE bonus 1:1, 28 Oct 2024:
+previous close 2,655.70, close 1,334.35; NIFTYBEES 1:10 split, 19 Dec 2019: previous close 1,292.54, close 130.20).
+Addendum 12's adjustment therefore missed every split and bonus and also fired on every stock after weekend special
+sessions (budget days, muhurat trading), which the download skips. The first run's numbers (NIFTYBEES -9.8% a year in
+2016-2026) are invalid and were deleted. No rule, parameter or pass bar of Addendum 12 changes; only the price data.
+The owner chose this replacement (8 Oct 2026):
+1. Official corporate actions, Jan 2010 on: the "Bc" file inside NSE's daily PR zip (archives/equities/bhavcopy/pr),
+   every trading day from 4 Jan 2010, EQ-series rows, de-duplicated by symbol, ex-date and purpose.
+   - BONUS a:b (a new shares for every b held): factor b / (a + b).
+   - Face-value split or consolidation FROM x TO y: factor y / x.
+   - DEMERGER (no ratio in the file): factor = open on the ex-date / close the session before.
+   - Rights, dividends and everything else: no adjustment (dividends are not added back anywhere, as in Addendum 12).
+   Prices before an ex-date are multiplied by its factor; previous close is no longer used.
+2. Before 2010 (no official file exists; NSE returns 404), a detection rule, fixed now: on day t, g = open(t) /
+   close(t-1) and c = close(t) / close(t-1). With k the nearest of 2/3, 1/2, 2/5, 1/3, 1/4, 1/5, 1/10, it is a split
+   or bonus with factor k when |g / k - 1| <= 3% and |c / k - 1| <= 8%. Smaller events (bonus 1:4 = 0.8 and the like)
+   cannot be told apart from ordinary moves and stay unadjusted; their count in 2010-2026 is reported.
+   Validation (run before the strategy tests, reported whatever it shows): on 2010-2026, for every stock that was ever
+   in the monthly top 100 and the four live ETFs, the rule's events against the official events with factor <= 2/3
+   (same day or one session apart). The rule is used for 2005-2009 only if recall AND precision are both >= 90%.
+   If it fails: period A becomes Jan 2011 - Dec 2015 (2010 is needed as history), stated in the results.
+3. The four live ETFs: official events where the file lists them; otherwise the detection rule in every year.
+4. Index closes and opens for Oct 2014 on come from NSE's daily index files (the same files as before Oct 2014), so
+   the Quality 30 check and the intraday Nifty-open filter have data for the whole of period B.
+
+## Addendum 12b (8 Oct 2026): data fixes found while checking Addendum 12a's prices
+
+Order of events, stated plainly: a run with 12a's code produced strategy numbers; before accepting them, the
+detection check's "false" events turned out to be real 2010 splits (M&M, KOTAKBANK, LUPIN) that the code did not
+read from the Bc files. Those numbers are discarded. Fixes, none of which touches a rule, parameter or pass bar:
+1. Wording: 2010 files write "FV SPLIT RS.10 TO RS.5" (no "FROM"); others "FVSPLT FRMRS 100 TO RE 1",
+   "BONUS1:2/FVSPLIT10TO2" (bonus and split on one ex-date: the product), "BONUS- 1:2", "BON-1:1". All are read now;
+   special dividends ("SPL RS 5"), debenture and preference-share bonuses are not price events and stay out.
+2. A revised ex-date (the same action listed again within 30 days in a later file) replaces the earlier one
+   instead of being applied twice (NBCC bonus, Feb 2017).
+3. Check, applied to every case: after adjustment, every overnight move below 0.6x or above 1.7x of a stock while it
+   was in the monthly top 100 (2010 on) was looked up. Corrected where a corporate action explains it: INFY bonus
+   1:1 on 15 Jun 2015 (Bc text cut off), SHRIRAMFIN split 10 to 2 on 10 Jan 2025 (not in the Bc files), and three
+   demergers listed as "SCHEME OF ARRANGEMENT" (ADANIENT 3 Jun 2015, ABIRLANUVO 20 Jan 2016, CGPOWER 15 Mar 2016),
+   which get 12a's demerger treatment - except ADANIENT, which opened at the old price (573.30 vs 637.00 the day
+   before) and closed at 109.75, so its factor is the ex-date close / previous close (0.172). Every other demerger
+   among the tested stocks opened and closed at a similar gap (checked, 38 events). Left as real: 63MOONS 2013, DHFL 2018, Infibeam 2018, JETAIRWAYS 2019,
+   YESBANK 2020. Before 2010 the detection rule decides, as pre-registered.
