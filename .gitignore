@@ -16,3 +16,8 @@ STOP
 backups/
 research/data/*.tgz
 research/data/hist/
+# server-only files (deploy/oci)
+.setup-done
+.token_cache.json.*
+*.before-handover
+research/data/nse/

@@ -365,6 +365,17 @@ Files in `deploy/oci/`:
 | `backup.py` | Daily journal + config backup to `backups/` (30 kept); also to Object Storage if `OCI_BACKUP_PAR_URL` is set. Never includes `.env` |
 | `alert.py` | Failure alerts with the log tail, secrets masked |
 
+**Updating the server from GitHub** (instead of `push.sh` once the server folder is a git checkout; server data -
+`.env`, `trader.yaml`, `config.yaml`, `trader/state/`, cache, logs, backups - is git-ignored and never touched):
+
+```bash
+ssh manipraocispaces_vm 'cd ~/portfolio-guardian && git pull --ff-only \
+  && .venv/bin/python -m pip install -q -r requirements.txt -r deploy/oci/requirements-server.txt \
+  && sed "s#__APP__#$HOME/portfolio-guardian#g" deploy/oci/crontab | crontab - \
+  && .venv/bin/python -m pytest -q tests | tail -2'
+```
+Deploy from `main` only, by hand (not from cron). `push.sh` remains for a brand-new server (it also copies `.env`).
+
 Only one machine may run the jobs: two machines logging in with the same TOTP will invalidate each
 other's tokens. Once the server runs, don't schedule anything on the laptop.
 
