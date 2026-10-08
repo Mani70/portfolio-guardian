@@ -421,3 +421,10 @@ capital at the 30 Oct 2026 review, replacing trend_allocation and momentum_rotat
 20 years matches the research within 1 point a year. If no long-term rule passes, both live strategies move to paper
 and the cash is parked in the liquid ETF; the owner decides from there. A momentum sleeve outside the core is not
 added: one live strategy, one set of rules.
+
+## Addendum 13a (8 Oct 2026, before any Addendum 13 data is downloaded)
+
+niftyindices.com serves price and total-return history for equity indices only; its G-Sec indices return nothing
+(checked: "Nifty 4-8 yr G-Sec Index", "Nifty 8-13 yr G-Sec", both endpoints, 2006 and 2016). So the 10% G-Sec sleeve of
+L1/L2 is the liquid ETF instead: it earns the overnight rate minus 0.23% (as idle cash), and live it is LIQUIDCASE.
+This understates the sleeve in falling-rate years; nothing else changes.
