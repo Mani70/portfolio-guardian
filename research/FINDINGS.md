@@ -384,3 +384,42 @@ Conclusion: by the bars fixed before the data was seen, no strategy family passe
 holding the Nifty ETF (or the four ETFs) did as well as or better than either live rule after costs, and the
 earlier 15-16% momentum figure came from testing on today's winners. Per Addendum 12 no rulebook is written and
 nothing is switched to live on this evidence; what to do with the paper strategies is the owner's decision.
+
+## Addendum 13: the final rules per horizon (8 Oct 2026; pre-registered 13/13a; research/allocation20.py)
+
+Data: NSE total-return indices from niftyindices.com (dividends included; checked against NSE/AMC factsheets:
+Nifty 50 13.6%, Nifty 200 13.9%, Nifty200 Momentum 30 18.8% a year Apr 2005 - Jun 2026, exactly as published), ETF
+expense ratios deducted, GOLDBEES (from Mar 2007) and MON100 (from Apr 2011) bhavcopy prices adjusted as 12a/12b,
+liquid ETF at the overnight rate minus 0.23%. Decisions at a month's last close, traded at the next close, ETF costs.
+A = 2006-2015 (out of sample), B = 2016 - Sep 2026. Rs 4.2L.
+
+| CAGR / worst fall / Sharpe | A: 2006-2015 | B: 2016-2026 | turnover |
+|---|---|---|---|
+| Nifty 50 TRI held (benchmark) | 12.1% / -59.5% / 0.59 | 11.4% / -38.3% / 0.77 | - |
+| M1: Nifty200 Momentum 30 ETF held | 17.2% / -67.8% / 0.76 | 15.8% / -34.0% / 0.87 | - |
+| M2: M1 + 200-day brake | 20.1% / -42.3% / 1.00 | 11.1% / -34.0% / 0.74 | 317%/yr |
+| (neighbours: 150 / 250 days) | 20.3% / 18.3%, Sharpe 1.03 / 0.91 | 10.6% / 9.8%, Sharpe 0.72 / 0.65 | |
+| **L1: Nifty 50 45 / Next 50 15 / MON100 20 / gold 10 / liquid 10** | **14.9% / -48.1% / 0.85** | **15.2% / -27.4% / 1.26** | 16%/yr |
+| L2: L1 with Momentum 30 15 (Nifty 50 30) | 15.8% / -50.2% / 0.90 | 15.8% / -27.0% / 1.27 | 16%/yr |
+| reference: L1 never rebalanced | 12.1% / -57.2% / 0.64 | 11.5% / -35.1% / 0.81 | |
+| reference: L1, 5-point bands only | 15.1% / -48.7% / 0.86 | 15.1% / -28.0% / 1.23 | 13%/yr |
+
+Verdicts against the pre-registered bars:
+- **Intraday: no real money** (decided on evidence; SEBI FY23: 71% of individual intraday traders lost money).
+- **Momentum: M1 PASSES** - the published index ETF beat the Nifty 50 on return and Sharpe in both periods (+5.1 and
+  +4.4 points a year), unlike the DIY rule of Addendum 12. Its 2008 fall was deeper (-68% vs -60%). **M2 FAILS**: the
+  brake helped in 2006-2015 (it dodged 2008) and hurt in 2016-2026 (whipsaws; it trades 3x a year's value).
+- **Long-term core: L1 PASSES** - higher Sharpe and a shallower worst fall than the Nifty 50 in both periods.
+  **L2 FAILS by 0.1 point** (higher Sharpe in both, but its 2008 fall was 2.1 points deeper than L1's; the bar was 2).
+- Rebalancing earns its keep: the same mix never rebalanced makes about what the Nifty does (A 12.1%, B 11.5%);
+  rebalanced it makes 3-4 points a year more with a shallower fall. Year-end rebalancing on top of the bands adds a
+  little (Sharpe 1.26 vs 1.23 in B).
+
+Caveats: MON100 (Nasdaq 100 in rupees) had an exceptional decade and carries 20%; it has traded above its NAV when
+India's overseas-investment limits were hit (buying at a premium is a cost the backtest only partly sees). The
+2008-type fall of an 80%-equity mix is still about -48%. Taxes: each rebalance can realise gains (equity 20% short
+term, 12.5% long term above Rs 1.25L a year); turnover is 16% of the portfolio a year.
+
+Outcome (as pre-registered): the live core becomes L1 at the 30 Oct 2026 review, replacing trend_allocation and
+momentum_rotation, once an engine replay over the 20 years matches this within 1 point a year. The momentum ETF is
+not added as a second live strategy (one live strategy, one set of rules).

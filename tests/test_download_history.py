@@ -63,3 +63,14 @@ def test_corporate_actions_from_the_pr_zip():
                     dict(file_date="2024-10-28", series="EQ", symbol="INFY", ex_date="2026-09-04",
                          purpose="FV SPLIT FROM RS 5 TO RE 1")]
     assert m.url_pr(date(2024, 10, 28)).endswith("/archives/equities/bhavcopy/pr/PR281024.zip")
+
+
+def test_niftyindices_list_replies():
+    m = _mod()
+    price = [{"RequestNumber": "His1", "Index Name": "", "INDEX_NAME": "Nifty200 Momentum 30",
+              "HistoricalDate": "10 Jan 2008", "OPEN": "-", "HIGH": "-", "LOW": "-", "CLOSE": "3945.67"}]
+    assert m.parse_niftyindices(price) == [dict(date="2008-01-10", index="Nifty200 Momentum 30", open=None, high=None,
+                                                low=None, close=3945.67)]
+    tri = [{"RequestNumber": "TRI1", "Index Name": "Nifty 50", "Date": "10 Jan 2008", "TotalReturnsIndex": "7483.81",
+            "NTR_Value": "7358.75"}, {"Index Name": "X", "Date": "bad", "TotalReturnsIndex": "1"}]
+    assert m.parse_tri(tri) == [dict(date="2008-01-10", index="Nifty 50", tri=7483.81)]
