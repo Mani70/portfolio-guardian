@@ -140,8 +140,13 @@ def cmd_check(cfg, args) -> int:
         print("DDPI active: automatic delivery sells are allowed.")
     from .instruments import Instruments
     inst = Instruments.load(client, ROOT / "cache")
-    for s in ("RELIANCE", "NIFTYBEES", "GOLDBEES", "MON100"):
-        print(f"  {s:<10} security_id {inst.security_id(s)}  tick ₹{inst.tick(s)}")
+    traded = {"NIFTYBEES"}
+    for st in build(cfg):
+        if (cfg["strategies"].get(st.name) or {}).get("live") and st.engine == "swing":
+            traded |= set(st.symbols(C.universe(cfg)))
+    for s in sorted(traded):
+        sid = inst.security_id(s)
+        print(f"  {s:<12} security_id {sid or 'MISSING: orders for it would be blocked'}  tick ₹{inst.tick(s)}")
     try:
         from .brokers.indstocks import IndStocksBroker
         b = IndStocksBroker(client)
@@ -153,6 +158,8 @@ def cmd_check(cfg, args) -> int:
     for s in build(cfg):
         sc = cfg["strategies"].get(s.name) or {}
         ok, why, st = paper_gate(jp, s.name, s.engine, cfg)
+        if sc.get("live") and not ok and sc.get("override_gate"):
+            why = f"skipped by override_gate - may trade live ({why})"
         print(f"  {s.name:<20} {s.engine:<8} live={'yes' if sc.get('live') else 'no ':<3} gate: {why}")
     print("\nLive orders also need your static IP whitelisted on indstocks.com/app/api-trading/access-tokens.")
     return 0
