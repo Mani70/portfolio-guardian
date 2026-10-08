@@ -463,3 +463,46 @@ Verdicts against the pre-registered bars:
 
 Outcome (as pre-registered): rules unchanged; the report's footer now says the 20-year test did not prove an edge
 for either list, with these numbers. Nothing trades on the ideas; the autopilot rulebook is untouched.
+
+## Addendum 16: Dalio's All Weather, risk parity with bonds, and a valuation tilt (8 Oct 2026; pre-registered; research/allweather16.py)
+
+Nifty 50 today (8 Oct 2026): P/E 19.0 (34th percentile of daily values since 1999), P/B 2.73, dividend yield 1.24%
+(37th percentile): middle of its range, neither cheap nor expensive. RBI's yield history (data.rbi.org.in) is reachable
+but its data service takes only payloads encrypted inside its web app; that was not reverse-engineered, so bonds
+start Oct 2015 (NSE's G-Sec total-return indices), as pre-registered.
+
+Measuring stick: on Sharpe over cash (not over zero) L1 still beats the Nifty 50 in A (0.51 vs 0.33) and B (0.83 vs
+0.44). Re-run of the yearly re-test's Test 2 for every year 2010-2025: same verdict (pass) on both definitions.
+
+| Nov 2015 - Sep 2026 | CAGR | worst fall | Sharpe over cash |
+|---|---|---|---|
+| Nifty 50 TRI held | 11.1% | -38.3% | 0.43 |
+| **L1 (live)** | **14.9%** | **-27.4%** | **0.81** |
+| AW: Nifty 50 30 / G-Sec 15y+ 40 / G-Sec 4-8y 15 / gold 15 | 10.3% | -12.2% | 0.82 |
+| half L1 / half AW | 12.8% | -19.7% | 0.86 |
+| L1g: L1 with G-Sec 4-8y instead of liquid | 15.1% | -27.5% | 0.82 |
+| (from Nov 2018) L1 / RP inverse 3-yr vol, Nifty/MON100/gold/G-Sec 8-13y | 15.8% / 11.6% | -27.4% / -11.8% | 0.84 / 1.13 |
+
+Part 1 (for the owner; cannot go live under Addendum 14 with 11 years of bonds): All Weather makes 4.6 points a year
+less than L1 for the same return per unit of risk; it suits capital protection, not the owner's Growth goal. Risk
+parity has the best return per unit of risk (Dalio's point) but 4 points a year less return: Bridgewater lifts it with
+leverage, which this account cannot and should not use. Bonds instead of the liquid sleeve change almost nothing.
+
+| Valuation tilt on L1 | A: 2006-2015 | B: 2016-2026 |
+|---|---|---|
+| L1 | 14.91% / -48.1% / 0.51 | 15.24% / -27.4% / 0.83 |
+| **V1: dividend yield, 20% cut-offs** | **15.84% / -44.1% / 0.57** | **15.34% / -27.4% / 0.84** |
+| neighbour 10% / 30% | 15.58% / 15.66%, Sharpe 0.56 / 0.57 | 15.25% / 15.63%, Sharpe 0.83 / 0.88 |
+| reference: P/E, 20% (2021 method break) | 15.93% / -45.6% / 0.58 | 14.88% / -22.0% / 0.87 |
+
+- **V1 PASSES its pre-registered bar** (Sharpe over cash above L1 in A and B, CAGR not lower, both neighbours above).
+- How strong (reading the result, not a bar): the gain is episodic. "Expensive" held at 41 of 250 month-ends (2007,
+  2008, 2009-10, 2017, 2018, 2021) and "cheap" at 3 (Nov 2008, Feb 2009, Mar 2020). Year by year: -7.5 points in 2007
+  (it left the bubble's last leg), +5.7 in 2008, +2.5 in 2009, +2.3 in 2011, +1.0 in 2020, -1.6 in 2021, nothing in
+  most years. In B the margin is +0.1 point a year and Sharpe +0.01 (the 10% neighbour's Sharpe margin is under
+  0.005). A real but small effect, concentrated in two crashes.
+- Outcome as pre-registered: no automatic change; it goes to the owner as a rulebook decision (Addendum 14).
+
+Part 3 (done, measurement only): the daily report now (1) says it is a price-and-momentum screen that does not judge
+the business, (2) shows the Nifty 50's P/E, P/B and dividend yield with their percentile since 1999 and this test's
+result in one line, and (3) tracks its ideas over 20 and 60 sessions.

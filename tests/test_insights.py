@@ -140,3 +140,21 @@ def test_nse_feeds_become_flags_blocking_and_caution(tmp_path):
     assert "UP" not in rep.buys.index                                   # blocked by the auditor's resignation
     text = "\n".join(I.compose(rep, idx))
     assert "⚠️ 2026-10-08: Actions initiated/taken or orders passed-XBRL - regulatory action/order" in text
+
+
+def test_valuation_line_and_both_track_records(tmp_path):
+    days = pd.bdate_range("2020-01-01", periods=400)
+    pe = np.linspace(30, 15, 400)
+    pd.DataFrame({"date": days.strftime("%Y-%m-%d"), "index": "Nifty 50", "pe": pe, "pb": pe / 6,
+                  "div_yield": 30 / pe}).to_csv((tmp_path / "valuation").mkdir() or tmp_path / "valuation" / "pepb.csv",
+                                                index=False)
+    line = I.valuation_line(tmp_path, date(2021, 7, 1), update=False)
+    assert "P/E 15.0 (above 0% of days since 1999)" in line and "dividend yield 2.00% (above 100%" in line
+    assert I.valuation_line(tmp_path / "none", date(2021, 7, 1), update=False) == ""
+    p = _panel()
+    rep = I.screen(I.facts(p), I.market(p), {})
+    I.record(I.Report(p["close"].index[-70], rep.market, rep.buys, rep.avoids, [], [], 0, 0), tmp_path / "ideas.csv")
+    both = I.track_records(p, tmp_path / "ideas.csv")
+    assert "with 20 sessions since" in both and "with 60 sessions since" in both
+    text = "\n".join(I.compose(rep, {}, both, valuation=line))
+    assert "Nifty 50 valuation" in text and "does not judge the business" in text
