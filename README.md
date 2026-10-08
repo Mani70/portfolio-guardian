@@ -391,6 +391,17 @@ At the month's last session the core buys its mix (orders for the next open, lis
 `trader.run cancel` before 09:00 stops them). Buys that need money from same-evening sells wait a day.
 Taxes: each rebalance can realise gains (about 16% of the portfolio is traded a year).
 
+### Daily swing ideas on Telegram (information only - never traded)
+`trader.run insights` (weekdays 19:30, again 21:30 if NSE's files were late; sends once a day) screens every NSE
+stock on the day's official data (bhavcopy, delivery %, splits/bonuses) and sends up to 5 BUY ideas and 5 AVOID/EXIT
+ideas, each with its facts (trend, NSE-style momentum, 52-week high/low, relative strength, delivery, liquidity,
+volatility), the official filings, the risks and the level that would invalidate it; your INDstocks holdings that
+look weak are flagged. When nothing qualifies it shows how many stocks each rule removed. In a falling market (Nifty
+ETF below its 200-day average) there are no BUY ideas, only a labelled watchlist. Past ideas are recorded
+(`cache/insights/ideas.csv`) and their 20-session results against the Nifty ETF are reported. The first run downloads
+~400 sessions of NSE files (about 20 minutes). Rules: `trader/insights.py` RULES - a professional-style screen, not a
+tested trading signal.
+
 # Phase 6: Running on an OCI server (Oracle Linux 9)
 
 Files in `deploy/oci/`:
