@@ -453,3 +453,42 @@ unchanged, same costs and expense ratios; benchmark = Nifty 50 TRI held):
 - Data update rule: the bhavcopy, corporate-action and niftyindices downloads of Addenda 12-13 are extended to the
   new year; idle cash after 2025 earns NSE's "Nifty 1D Rate Index" (overnight rate) minus 0.23% instead of the
   hand-entered RATE_PATH. A re-test that cannot get its data changes nothing and says so.
+
+## Addendum 15 (8 Oct 2026, before any of it runs): do the daily insights ideas have an edge?
+
+The daily Telegram report (trader/insights.py) lists up to 5 BUY ideas and 5 AVOID ideas each evening. It is
+information only and places no orders; this test only decides what the report may claim about its own record.
+The rules are tested exactly as written in trader/insights.py RULES and screen() on 8 Oct 2026, with no change
+before or after the run. Changing a threshold after seeing these results would be fitting to this data, so any
+change needs a new addendum and a new hold-out.
+
+Data and method (research/insights20.py):
+- The bhavcopy panel of Addendum 12, EQ series only (rows in other series are blank, as in the live store), with
+  official corporate actions (12a/12b). The pre-2010 detection rule failed its validation, so **period A is Jan 2011 -
+  Dec 2015** (the 252-session lookback then starts in 2010, when official actions begin). **B is Jan 2016 to the last
+  idea day with 21 sessions after it.**
+- Every number facts() uses is rebuilt as rolling matrices; on 5 sample days the vectorised numbers must equal
+  facts() on the last 400 sessions (the live store's window) to 1e-6. Two exceptions to "exactly": the price filter
+  (≥ ₹50) uses the unadjusted close (what the bot saw that day, not a price scaled by a later split); history counts
+  sessions within the last 400, as in the live store.
+- Not reproducible from history, so left out: the filings check (red flags block very few stocks) and delivery %
+  (its 10% weight in the ranking is neutral for every stock). The market filter is the live one (NIFTYBEES vs its
+  200-day average).
+- An idea dated d (the report is sent after the close) is bought at the close of d+1 and sold at the close of d+21:
+  20 sessions, the track record's horizon. No close on d+1: the idea is skipped. A stock that stops trading before
+  d+21 is sold at its last close (counted and reported). Costs: INDstocks delivery charges on ₹1,00,000 an idea plus
+  0.05% slippage each side (backtest Costs, DP ₹21.83).
+- Benchmark: the Nifty 50 price index over the same two closes (prices only on both sides: no dividends anywhere).
+  Reference: the equal-weighted average of all liquid stocks that day ("buying any liquid stock").
+- Each idea day is one observation: the mean of that day's ideas. Ideas overlap (20-session holds started daily), so
+  t-statistics are Newey-West with 19 lags.
+
+Pass bars, each in A AND in B:
+- BUY has an edge: mean excess over the Nifty 50 after costs > 0 with t ≥ 2.
+- BUY beats buying any liquid stock: mean excess over the liquid average (both before costs) > 0 with t ≥ 2.
+- AVOID is a useful warning: mean excess over the Nifty 50 (before costs: the advice is not to own it) < 0 with t ≤ -2.
+Reported without a bar: hit rates; 5- and 60-session horizons; the watchlist (would-be BUY ideas on days the market
+filter blocked them) against the BUY ideas; ideas per day.
+
+What changes: the report's footer states, in one line each, whether BUY and AVOID passed and by how much. A failed
+bar is stated as plainly as a passed one. Nothing trades on these ideas either way; the autopilot rulebook is untouched.
