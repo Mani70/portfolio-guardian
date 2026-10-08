@@ -423,3 +423,11 @@ term, 12.5% long term above Rs 1.25L a year); turnover is 16% of the portfolio a
 Outcome (as pre-registered): the live core becomes L1 at the 30 Oct 2026 review, replacing trend_allocation and
 momentum_rotation, once an engine replay over the 20 years matches this within 1 point a year. The momentum ETF is
 not added as a second live strategy (one live strategy, one set of rules).
+
+Engine replay (research/replay_core.py: the real CoreAllocation strategy, Engine._allocate, risk checks and paper
+broker with real costs, on the same sleeve prices, Dec 2005 - Oct 2026): A 14.66% / -48.4% (research 14.91% /
+-48.1%), B 15.17% / -27.4% (research 15.24% / -27.4%): within 1 point a year, as pre-registered. 168 orders, 77
+partial sells over 20 years. The first replay found a real bug before any money was involved: the bonus/split check
+compared a position's AVERAGE cost with the price on its opening day, which fails once a position is topped up over
+years; it "found" splits during the 2020 crash and inflated share counts (replay 46% a year). Topped-up positions now
+carry their last fill as the check's reference (corporate.ca_ref; regression test in tests/test_allocation.py).

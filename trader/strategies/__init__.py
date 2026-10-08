@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import List
 
+from .allocation import CoreAllocation
 from .gap_fade import GapFade
 from .gap_reversal import GapReversal
 from .gtaa import TrendAllocation
@@ -13,6 +14,7 @@ REGISTRY = {
     "trend_allocation": TrendAllocation,
     "gap_reversal": GapReversal,
     "gap_fade": GapFade,
+    "core_allocation": CoreAllocation,
 }
 
 

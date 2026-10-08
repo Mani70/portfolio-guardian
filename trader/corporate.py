@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable, Optional, Tuple
 
 import pandas as pd
 
@@ -65,6 +65,16 @@ class Adjustment:
         return self.position.avg_price * self.position.qty / self.new_qty
 
 
+def ca_ref(p: Position) -> Tuple[float, date]:
+    """The price and day the bonus/split check compares with that day's candle: the position's last fill when it was
+    topped up (meta ca_px / ca_day - an average of buys over years matches no single day), else its cost and
+    opening day."""
+    m = p.meta or {}
+    if m.get("ca_px") and m.get("ca_day"):
+        return float(m["ca_px"]), date.fromisoformat(str(m["ca_day"]))
+    return p.avg_price, p.entry_time.date()
+
+
 def _inside(px: float, lo: float, hi: float) -> bool:
     return lo * (1 - SLACK) <= px <= hi * (1 + SLACK)
 
@@ -73,10 +83,11 @@ def find_one(p: Position, df: Optional[pd.DataFrame], rejected: Iterable[str] = 
              loose: bool = False) -> Optional[Adjustment]:
     """The adjustment the position needs to be on today's price basis, or None.
     rejected: ex-dates (ISO) already judged to be real price falls. loose: also use near-ratio opening gaps."""
-    if df is None or len(df) < 2 or p.qty <= 0 or p.avg_price <= 0:
+    ref_px, ref_day = ca_ref(p)
+    if df is None or len(df) < 2 or p.qty <= 0 or ref_px <= 0:
         return None
     rejected = set(rejected)
-    opened = pd.Timestamp(p.entry_time.date())
+    opened = pd.Timestamp(ref_day)
     if opened > df.index[-1]:
         return None                                    # bought today: no candle for that day yet
     adj, found = adjust_splits(df)
@@ -107,10 +118,10 @@ def find_one(p: Position, df: Optional[pd.DataFrame], rejected: Iterable[str] = 
     if row.empty:
         return None
     lo, hi = float(row["low"].iloc[-1]), float(row["high"].iloc[-1])
-    if _inside(p.avg_price, lo, hi):
+    if _inside(ref_px, lo, hi):
         return None                                    # the position is on today's price basis
     for r in STANDARD:
-        if _inside(p.avg_price * r, lo, hi):
+        if _inside(ref_px * r, lo, hi):
             when = max(bounds).date() if bounds else row.index[-1].date()
             new_qty = int(p.qty / r + 1e-6)            # fractions of a share are paid out in cash
             if when.isoformat() in rejected or new_qty < 1:
@@ -156,6 +167,8 @@ def apply(journal, a: Adjustment, now: datetime) -> str:
         journal.put(f"owner_cost:{p.strategy}:{p.symbol}", meta["owner_cost"])
     if meta.get("acct_qty") is not None:
         meta["acct_qty"] = int(meta["acct_qty"]) + a.new_qty - old_q
+    if meta.get("ca_px"):
+        meta["ca_px"] = float(meta["ca_px"]) * a.factor  # the check's reference moves to the new price basis
     meta.setdefault("corporate_actions", []).append(
         {"date": a.when.isoformat(), "factor": a.factor, "old_qty": old_q, "new_qty": a.new_qty,
          "applied": now.isoformat()})
