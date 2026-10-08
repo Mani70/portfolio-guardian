@@ -60,9 +60,14 @@ def parse_bc(blob: bytes, d: date) -> List[dict]:
     out = []
     for r in csv.DictReader(io.StringIO(text.lstrip("\ufeff"))):
         r = {str(k).strip().upper(): (str(v).strip() if v is not None else "") for k, v in r.items() if k}
-        try:
-            ex = datetime.strptime(r.get("EX_DT", ""), "%d/%m/%Y").date()
-        except ValueError:
+        ex = None
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%b-%Y", "%d-%m-%Y"):    # the format changed over the years
+            try:
+                ex = datetime.strptime(r.get("EX_DT", ""), fmt).date()
+                break
+            except ValueError:
+                continue
+        if ex is None:
             continue
         if r.get("SYMBOL") and r.get("PURPOSE"):
             out.append(dict(file_date=d.isoformat(), series=r.get("SERIES", "").upper(), symbol=r["SYMBOL"].upper(),

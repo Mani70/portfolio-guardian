@@ -55,8 +55,11 @@ def test_corporate_actions_from_the_pr_zip():
         z.writestr("Pr281024.csv", "x\n")
         z.writestr("Bc281024.csv", "SERIES,SYMBOL,SECURITY,RECORD_DT,BC_STRT_DT,BC_END_DT,EX_DT,ND_STRT_DT,ND_END_DT,"
                                    "PURPOSE\nEQ,RELIANCE,Reliance Industries Ltd,28/10/2024, , ,28/10/2024, , ,"
-                                   "BONUS 1:1                \nEQ,BAD,Bad Ltd, , , , , , ,DIVIDEND\n")
+                                   "BONUS 1:1                \nEQ,BAD,Bad Ltd, , , , , , ,DIVIDEND\n"
+                                   "EQ,INFY,Infosys Limited,2026-09-04,,,2026-09-04,,,FV SPLIT FROM RS 5 TO RE 1\n")
     rows = m.parse_bc(buf.getvalue(), date(2024, 10, 28))
     assert rows == [dict(file_date="2024-10-28", series="EQ", symbol="RELIANCE", ex_date="2024-10-28",
-                         purpose="BONUS 1:1")]
+                         purpose="BONUS 1:1"),
+                    dict(file_date="2024-10-28", series="EQ", symbol="INFY", ex_date="2026-09-04",
+                         purpose="FV SPLIT FROM RS 5 TO RE 1")]
     assert m.url_pr(date(2024, 10, 28)).endswith("/archives/equities/bhavcopy/pr/PR281024.zip")
