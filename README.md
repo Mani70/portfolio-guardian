@@ -369,7 +369,7 @@ Files in `deploy/oci/`:
 `.env`, `trader.yaml`, `config.yaml`, `trader/state/`, cache, logs, backups - is git-ignored and never touched):
 
 ```bash
-ssh manipraocispaces_vm 'cd ~/portfolio-guardian && git pull --ff-only \
+ssh manipraocispaces_vm 'cd ~/portfolio-guardian && git pull --ff-only origin main \
   && .venv/bin/python -m pip install -q -r requirements.txt -r deploy/oci/requirements-server.txt \
   && sed "s#__APP__#$HOME/portfolio-guardian#g" deploy/oci/crontab | crontab - \
   && .venv/bin/python -m pytest -q tests | tail -2'
