@@ -44,3 +44,19 @@ def test_niftyindices_reply():
     rows = m.parse_niftyindices(payload)
     assert rows == [dict(date="2015-01-02", index="NIFTY100 QUALITY 30", open=1500.5, high=1510.0, low=1490.0,
                          close=1505.25)]
+
+
+def test_corporate_actions_from_the_pr_zip():
+    import io
+    import zipfile
+    m = _mod()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("Pr281024.csv", "x\n")
+        z.writestr("Bc281024.csv", "SERIES,SYMBOL,SECURITY,RECORD_DT,BC_STRT_DT,BC_END_DT,EX_DT,ND_STRT_DT,ND_END_DT,"
+                                   "PURPOSE\nEQ,RELIANCE,Reliance Industries Ltd,28/10/2024, , ,28/10/2024, , ,"
+                                   "BONUS 1:1                \nEQ,BAD,Bad Ltd, , , , , , ,DIVIDEND\n")
+    rows = m.parse_bc(buf.getvalue(), date(2024, 10, 28))
+    assert rows == [dict(file_date="2024-10-28", series="EQ", symbol="RELIANCE", ex_date="2024-10-28",
+                         purpose="BONUS 1:1")]
+    assert m.url_pr(date(2024, 10, 28)).endswith("/archives/equities/bhavcopy/pr/PR281024.zip")

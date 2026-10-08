@@ -118,16 +118,155 @@ def load_panel(hist: Path, fields=("open", "high", "low", "close", "prevclose", 
     panel = {f: raw.pivot(index="date", columns="symbol", values=f).astype("float32") for f in fields}
     panel["eq"] = raw.pivot(index="date", columns="symbol", values="eq").fillna(0).astype("int8")
     del raw
-    # corporate actions: on an ex-date NSE's previous close is the adjusted one
-    close, prev = panel["close"], panel["prevclose"]
-    last = close.ffill().shift(1)
-    factor = (prev / last).where(close.notna())
-    factor = factor.where((factor > 0.02) & (factor < 20) & ((factor - 1).abs() > 0.002)).fillna(1.0)
-    cum = factor.iloc[::-1].cumprod().iloc[::-1].shift(-1).fillna(1.0)       # product of LATER factors
-    for f in ("open", "high", "low", "close"):
-        panel[f] = (panel[f] * cum).astype("float32")
-    panel["factor"] = factor.astype("float32")
-    return panel
+    return panel                                      # raw prices: adjust_prices() runs once the universe is known
+
+
+# ---------------------------------------------------------------- corporate actions (Addendum 12a)
+SPLIT_K = [2 / 3, 1 / 2, 2 / 5, 1 / 3, 1 / 4, 1 / 5, 1 / 10]
+OFFICIAL_FROM = pd.Timestamp("2010-01-01")
+_BONUS = re.compile(r"BONUS\s*(\d+)\s*:\s*(\d+)")
+_FV = re.compile(r"\bFR(?:O)?M\s*R[SE]\.?\s*([\d.]+)\D*?\bTO\s*R[SE]\.?\s*([\d.]+)")
+
+
+def purpose_factor(purpose: str) -> Optional[float]:
+    """Price factor of one corporate action (prices before the ex-date are multiplied by it): BONUS a:b -> b/(a+b);
+    face value FROM x TO y -> y/x; DEMERGER -> nan (taken from the ex-date's opening gap); anything else -> None."""
+    p = " ".join(str(purpose).upper().split())
+    m = _BONUS.search(p)
+    if m and int(m.group(1)) > 0 and int(m.group(2)) > 0:
+        return int(m.group(2)) / (int(m.group(1)) + int(m.group(2)))
+    m = _FV.search(p)
+    if m and re.search(r"SPL|SUB|CONSOL|\bFV\b|FACE", p):
+        x, y = float(m.group(1)), float(m.group(2))
+        if x > 0 and y > 0 and x != y:
+            return y / x
+    if "DEMERGER" in p:
+        return float("nan")
+    return None
+
+
+def official_events(hist: Path, changes: Dict[str, tuple]) -> pd.DataFrame:
+    """symbol, ex_date, factor (nan = demerger) from NSE's Bc files, EQ rows, de-duplicated; symbols renamed like
+    the prices (an old symbol before its change date belongs to the final symbol)."""
+    p = hist / "corp_actions.csv"
+    if not p.exists():
+        return pd.DataFrame(columns=["symbol", "ex_date", "factor", "purpose"])
+    ca = pd.read_csv(p, dtype=str)
+    ca = ca[ca["series"] == "EQ"].drop_duplicates(["symbol", "ex_date", "purpose"])
+    ca["factor"] = ca["purpose"].map(purpose_factor)
+    ca = ca[ca["purpose"].map(purpose_factor).notna() | ca["purpose"].str.upper().str.contains("DEMERGER")].copy()
+    ca["ex_date"] = pd.to_datetime(ca["ex_date"])
+
+    def rename(r):
+        ch = changes.get(r.symbol)
+        return final_symbol(r.symbol, changes) if ch is not None and r.ex_date < ch[1] else r.symbol
+    if changes and len(ca):
+        ca["symbol"] = [rename(r) for r in ca.itertuples()]
+    # the same split listed twice (revised wording) counts once
+    return ca.drop_duplicates(["symbol", "ex_date", "factor"])[["symbol", "ex_date", "factor", "purpose"]]
+
+
+def detected_events(o: pd.DataFrame, c: pd.DataFrame) -> pd.DataFrame:
+    """Addendum 12a detection rule: k the nearest of SPLIT_K to g = open/previous close; an event when |g/k - 1| <= 3%
+    and |close/previous close / k - 1| <= 8%."""
+    prev = c.ffill().shift(1)
+    g, r = (o / prev), (c / prev)
+    ks = np.array(SPLIT_K)
+    lg = np.nan_to_num(np.log(g.where(g > 0).to_numpy(dtype=float)), nan=0.0)   # no price: no event (g is nan)
+    k = ks[np.argmin(np.abs(lg[..., None] - np.log(ks)), axis=-1)]
+    with np.errstate(invalid="ignore"):
+        hit = (np.abs(g.to_numpy(dtype=float) / k - 1) <= 0.03) & (np.abs(r.to_numpy(dtype=float) / k - 1) <= 0.08)
+    i, j = np.nonzero(hit)
+    return pd.DataFrame({"symbol": c.columns[j], "ex_date": c.index[i], "factor": k[i, j]})
+
+
+def _session_index(dates: pd.DatetimeIndex, when: pd.Series) -> np.ndarray:
+    return dates.searchsorted(when.to_numpy())               # an ex-date on a holiday -> the next session
+
+
+def validate_detection(panel, official: pd.DataFrame, symbols: List[str]) -> bool:
+    """Recall and precision of the detection rule against the official events (factor <= 2/3), 2010 on, within one
+    session. Printed whatever it shows."""
+    c, o = panel["close"][symbols], panel["open"][symbols].where(panel["open"][symbols] > 0)
+    rows = c.index >= OFFICIAL_FROM
+    det = detected_events(o, c)
+    det = det[det.ex_date >= OFFICIAL_FROM]
+    off = official[official.symbol.isin(symbols) & (official.ex_date >= OFFICIAL_FROM)
+                   & (official.ex_date <= c.index[-1]) & (official.factor <= 2 / 3 + 1e-9)].copy()
+    dates = c.index[rows]
+    off["i"] = _session_index(dates, off.ex_date)
+    det["i"] = _session_index(dates, det.ex_date)
+    od = {}
+    for s, i in zip(off.symbol, off.i):
+        od.setdefault(s, []).append(i)
+    dd = {}
+    for s, i in zip(det.symbol, det.i):
+        dd.setdefault(s, []).append(i)
+    hit_off = sum(any(abs(i - x) <= 1 for x in dd.get(s, [])) for s, i in zip(off.symbol, off.i))
+    hit_det = sum(any(abs(i - x) <= 1 for x in od.get(s, [])) for s, i in zip(det.symbol, det.i))
+    recall = hit_off / len(off) if len(off) else float("nan")
+    precision = hit_det / len(det) if len(det) else float("nan")
+    small = official[official.symbol.isin(symbols) & (official.ex_date >= OFFICIAL_FROM) & (official.factor > 2 / 3)]
+    ok = recall >= 0.9 and precision >= 0.9
+    print(f"  detection rule on 2010-{c.index[-1]:%Y} ({len(symbols)} stocks/ETFs): official events (factor <= 2/3) "
+          f"{len(off)}, found {hit_off} (recall {recall:.1%}); rule events {len(det)}, true {hit_det} "
+          f"(precision {precision:.1%}) -> {'USED for 2005-2009' if ok else 'FAILS: period A becomes 2011-2015'}")
+    print(f"  smaller official events (factor > 2/3, not detectable, unadjusted before 2010): {len(small)}")
+    missed = off[[not any(abs(i - x) <= 1 for x in dd.get(s, [])) for s, i in zip(off.symbol, off.i)]]
+    false = det[[not any(abs(i - x) <= 1 for x in od.get(s, [])) for s, i in zip(det.symbol, det.i)]]
+    if len(missed):
+        print("    missed e.g.: " + ", ".join(f"{r.symbol} {r.ex_date:%d %b %Y} ({r.purpose})" for r in missed.head(8).itertuples()))
+    if len(false):
+        print("    false e.g.: " + ", ".join(f"{r.symbol} {r.ex_date:%d %b %Y} x{r.factor:.3f}" for r in false.head(8).itertuples()))
+    ROWS.append(dict(section="data", rule="detection rule validation", recall=recall, precision=precision,
+                     official=len(off), detected=len(det), passes=bool(ok)))
+    return ok
+
+
+def adjust_prices(panel, official: pd.DataFrame, use_detection: bool) -> None:
+    """Multiply prices before each ex-date by its factor: official events from 2010; detected events before 2010 when
+    the rule passed; for the four live ETFs, detected events in any year the official file doesn't list one."""
+    close, opn = panel["close"], panel["open"]
+    dates, cols = close.index, close.columns
+    factor = np.ones(close.shape)
+    used = 0
+
+    def put(sym, when, f):
+        nonlocal used
+        if sym not in cols:
+            return
+        j = cols.get_loc(sym)
+        col = close.iloc[:, j]
+        i = dates.searchsorted(when)
+        while i < len(dates) and np.isnan(col.iat[i]):
+            i += 1                                            # first session the stock traded on or after the ex-date
+        if i <= 0 or i >= len(dates):
+            return
+        if np.isnan(f):                                       # demerger: the opening gap
+            pc = col.iloc[:i].dropna()
+            f = float(opn.iat[i, j] / pc.iat[-1]) if len(pc) and opn.iat[i, j] > 0 else 1.0
+            if not 0.05 < f < 1.0:
+                return
+        factor[i, j] *= f
+        used += 1
+
+    off = official[official.ex_date >= OFFICIAL_FROM]
+    for r in off.itertuples():
+        put(r.symbol, r.ex_date, r.factor)
+    det = detected_events(opn.where(opn > 0), close)
+    listed = set(zip(off.symbol, off.ex_date))
+    for r in det.itertuples():
+        if r.ex_date < OFFICIAL_FROM and (use_detection or r.symbol in ETF_LIVE):
+            put(r.symbol, r.ex_date, r.factor)
+        elif r.ex_date >= OFFICIAL_FROM and r.symbol in ETF_LIVE and not any(
+                s == r.symbol and abs((d - r.ex_date).days) <= 5 for s, d in listed):
+            put(r.symbol, r.ex_date, r.factor)
+    f = pd.DataFrame(factor, index=dates, columns=cols)
+    cum = f.iloc[::-1].cumprod().iloc[::-1].shift(-1).fillna(1.0)          # product of LATER factors
+    for k in ("open", "high", "low", "close"):
+        panel[k] = (panel[k] * cum).astype("float32")
+    panel["factor"] = f.astype("float32")
+    print(f"  {used} corporate actions applied")
 
 
 def monthly_universe(panel, n: int) -> Dict[pd.Timestamp, List[str]]:
@@ -403,10 +542,16 @@ def main(argv=None) -> int:
     only = set(a.only.split(","))
     print("Loading the bhavcopy panel ...", flush=True)
     panel = load_panel(hist)
-    ca = int((panel["factor"] != 1).sum().sum())
     print(f"  {panel['close'].shape[0]} days {panel['close'].index.min():%d %b %Y} - {panel['close'].index.max():%d %b %Y}, "
-          f"{panel['close'].shape[1]} symbols, {ca} corporate-action adjustments")
+          f"{panel['close'].shape[1]} symbols")
     uni50, uni100 = monthly_universe(panel, 50), monthly_universe(panel, 100)
+    official = official_events(hist, symbol_changes(hist))
+    tested = sorted({s for u in uni100.values() for s in u} | set(ETF_LIVE))
+    use_detection = validate_detection(panel, official, [s for s in tested if s in panel["close"].columns])
+    adjust_prices(panel, official, use_detection)
+    if not use_detection:
+        global A_START
+        A_START = pd.Timestamp("2011-01-01")
     first = min(k for k, v in uni50.items() if v)
     print(f"  universe from {first:%b %Y}; e.g. {first:%b %Y}: {', '.join(uni50[first][:12])} ...")
     last = max(uni50)

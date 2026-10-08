@@ -7,7 +7,9 @@
 Per trading day, newest first:
   equities_YYYY.csv  every EQ/BE-series stock and ETF: open, high, low, close, prevclose, volume, value (Rs)
                      (bhavcopy: old cmDDMONYYYYbhav.csv.zip format, and the UDiFF format from July 2024)
-  indices.csv        every NSE index close (ind_close_all files) for days before Oct 2014, where NSE has them
+  indices.csv        every NSE index close (ind_close_all files), where NSE has them (from about Feb 2012)
+  corp_actions.csv   the "Bc" file of NSE's daily PR zip: bonuses, splits, demergers by ex-date (from Jan 2010;
+                     PREREGISTRATION.md Addendum 12a - the bhavcopy's previous close is NOT adjusted on ex-dates)
 Once: index_history.csv from niftyindices.com (Nifty 50, Next 50, Quality 30 and others, year by year), for the
 years the daily index files don't cover.
 
@@ -43,6 +45,31 @@ def urls_equities(d: date) -> List[str]:
     return [new, old] if d >= date(2024, 7, 8) else [old, new]
 
 
+def url_pr(d: date) -> str:
+    return f"{ARCH}/archives/equities/bhavcopy/pr/PR{d:%d%m%y}.zip"
+
+
+def parse_bc(blob: bytes, d: date) -> List[dict]:
+    """Corporate actions from the Bc file in a PR zip (SERIES, SYMBOL, ..., EX_DT dd/mm/yyyy, ..., PURPOSE)."""
+    import zipfile
+    with zipfile.ZipFile(io.BytesIO(blob)) as z:
+        name = next((n for n in z.namelist() if n.lower().startswith("bc") and n.lower().endswith(".csv")), None)
+        if name is None:
+            return []
+        text = z.read(name).decode("latin-1")
+    out = []
+    for r in csv.DictReader(io.StringIO(text.lstrip("\ufeff"))):
+        r = {str(k).strip().upper(): (str(v).strip() if v is not None else "") for k, v in r.items() if k}
+        try:
+            ex = datetime.strptime(r.get("EX_DT", ""), "%d/%m/%Y").date()
+        except ValueError:
+            continue
+        if r.get("SYMBOL") and r.get("PURPOSE"):
+            out.append(dict(file_date=d.isoformat(), series=r.get("SERIES", "").upper(), symbol=r["SYMBOL"].upper(),
+                            ex_date=ex.isoformat(), purpose=" ".join(r["PURPOSE"].split())))
+    return out
+
+
 def reduce_equities(rows: Iterable[dict], d: date) -> List[dict]:
     """Old bhavcopy (SYMBOL, SERIES, OPEN, HIGH, LOW, CLOSE, PREVCLOSE, TOTTRDQTY, TOTTRDVAL) or UDiFF (TckrSymb,
     SctySrs, OpnPric, HghPric, LwPric, ClsPric, PrvsClsgPric, TtlTradgVol, TtlTrfVal). EQ and BE series only."""
@@ -66,7 +93,7 @@ def reduce_equities(rows: Iterable[dict], d: date) -> List[dict]:
     return out
 
 
-def daily(store: Store, f: Fetcher, d: date, want_indices: bool) -> str:
+def daily(store: Store, f: Fetcher, d: date, want_indices: bool, want_ca: bool = False) -> str:
     notes = []
     if not store.is_done("equities", d):
         rows = None
@@ -89,6 +116,15 @@ def daily(store: Store, f: Fetcher, d: date, want_indices: bool) -> str:
             notes.append("indices: none")
         if Fetcher.host(ARCH) not in f.blocked:
             store.mark("indices", d)
+    if want_ca and not store.is_done("ca", d):
+        blob = f.get(url_pr(d))
+        rows = parse_bc(blob, d) if blob else []
+        if rows:
+            store.append("corp_actions.csv", rows)
+        elif not blob:
+            notes.append("corp actions: none")
+        if Fetcher.host(ARCH) not in f.blocked:
+            store.mark("ca", d)
     return "; ".join(notes)
 
 
@@ -219,7 +255,7 @@ def main(argv=None) -> int:
             return 1
         if d.weekday() < 5:
             try:
-                note = daily(store, f, d, want_indices=d < date(2014, 10, 1))
+                note = daily(store, f, d, want_indices=True, want_ca=d >= date(2010, 1, 1))
             except Exception as e:                               # noqa: BLE001
                 note = f"ERROR {type(e).__name__}: {str(e)[:200]}"
             n += 1
