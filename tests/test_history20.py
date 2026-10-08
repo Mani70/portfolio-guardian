@@ -15,8 +15,17 @@ def _mod():
     return m
 
 
-def test_load_index_reads_the_hand_saved_niftyindices_files(tmp_path):
+def _isolated(tmp_path):
+    """history20 with ROOT moved to tmp_path: only the hand-saved files, not whatever research/data/nse holds."""
+    import shutil
     m = _mod()
+    shutil.copytree(ROOT / "research" / "data" / "manual", tmp_path / "research" / "data" / "manual")
+    m.ROOT = tmp_path
+    return m
+
+
+def test_load_index_reads_the_hand_saved_niftyindices_files(tmp_path):
+    m = _isolated(tmp_path)
     q = m.load_index(tmp_path, ["nifty100quality30"])                  # nothing downloaded: manual files only
     assert q.index.min() == pd.Timestamp("2009-10-01") and q["close"].iloc[0] == 1000.0
     assert q["open"].isna().all()                                      # "-" in the file
@@ -27,7 +36,7 @@ def test_load_index_reads_the_hand_saved_niftyindices_files(tmp_path):
 
 
 def test_downloaded_history_wins_over_the_manual_files(tmp_path):
-    m = _mod()
+    m = _isolated(tmp_path)
     pd.DataFrame([dict(date="2008-12-31", index="NIFTY 50", open=1.0, close=2.0)]).to_csv(
         tmp_path / "index_history.csv", index=False)
     n = m.load_index(tmp_path, ["nifty50"])
