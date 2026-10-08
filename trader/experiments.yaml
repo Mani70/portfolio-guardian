@@ -3,28 +3,31 @@
 # morning check, with notional money. They NEVER send a real order, whatever trader.yaml says.
 #   python -m trader.run status     # shows the LAB positions and trades
 # To stop them: set enabled: false here (or delete this file) and push.
+#
+# ALL OFF since Oct 2026: the 20-year test (research/FINDINGS.md, Addenda 12-13) retired momentum rotation, so these
+# variants of it have nothing left to decide. The lab journal keeps their past paper trades; nothing new is placed.
 
 # Addendum 9 (research/PREREGISTRATION.md): momentum split into 3 tranches reviewed on different days, to remove
 # the luck of the review day (research/FINDINGS.md, Addendum 8), beside a control run by the live rule.
 capital: 345000                  # notional rupees for each family (the tranches share it; the control has its own)
 strategies:
   momentum_control:              # the live rule: one portfolio, reviewed on the last session of the month
-    enabled: true
+    enabled: false
     class: momentum_rotation
     capital_share: 1.0
     params: {slots: 10, exit_rank: 20, market_filter: true, review_session: last}
   momentum_t07:                  # tranche A: a third of the money, reviewed on the 7th session of each month
-    enabled: true
+    enabled: false
     class: momentum_rotation
     capital_share: 0.3333
     params: {slots: 10, exit_rank: 20, market_filter: true, review_session: 7}
   momentum_t14:                  # tranche B: the 14th session
-    enabled: true
+    enabled: false
     class: momentum_rotation
     capital_share: 0.3333
     params: {slots: 10, exit_rank: 20, market_filter: true, review_session: 14}
   momentum_tlast:                # tranche C: the last session (the live day)
-    enabled: true
+    enabled: false
     class: momentum_rotation
     capital_share: 0.3333
     params: {slots: 10, exit_rank: 20, market_filter: true, review_session: last}
@@ -33,7 +36,7 @@ strategies:
 # sold when the strategy has buys to make. On paper there is no money limit, so this checks the mechanics (orders,
 # fills, prices) and shows the yield; the one-day buy delay of the real account is not reproduced here.
   momentum_parked:
-    enabled: true
+    enabled: false
     class: momentum_rotation
     capital_share: 1.0
     params: {slots: 10, exit_rank: 20, market_filter: true, review_session: last}
@@ -42,7 +45,7 @@ strategies:
 # Addendum 11: the single portfolio with a second check - cash also while the Quality 30 index (NSE's daily index
 # file, trader/index_data.py) is below its 150-day average (research/FINDINGS.md Addendum 7, C2 / robustness).
   momentum_quality:
-    enabled: true
+    enabled: false
     class: momentum_rotation
     capital_share: 1.0
     params: {slots: 10, exit_rank: 20, market_filter: true, review_session: last,

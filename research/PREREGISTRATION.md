@@ -453,3 +453,82 @@ unchanged, same costs and expense ratios; benchmark = Nifty 50 TRI held):
 - Data update rule: the bhavcopy, corporate-action and niftyindices downloads of Addenda 12-13 are extended to the
   new year; idle cash after 2025 earns NSE's "Nifty 1D Rate Index" (overnight rate) minus 0.23% instead of the
   hand-entered RATE_PATH. A re-test that cannot get its data changes nothing and says so.
+
+## Addendum 15 (8 Oct 2026, before any of it runs): do the daily insights ideas have an edge?
+
+The daily Telegram report (trader/insights.py) lists up to 5 BUY ideas and 5 AVOID ideas each evening. It is
+information only and places no orders; this test only decides what the report may claim about its own record.
+The rules are tested exactly as written in trader/insights.py RULES and screen() on 8 Oct 2026, with no change
+before or after the run. Changing a threshold after seeing these results would be fitting to this data, so any
+change needs a new addendum and a new hold-out.
+
+Data and method (research/insights20.py):
+- The bhavcopy panel of Addendum 12, EQ series only (rows in other series are blank, as in the live store), with
+  official corporate actions (12a/12b). The pre-2010 detection rule failed its validation, so **period A is Jan 2011 -
+  Dec 2015** (the 252-session lookback then starts in 2010, when official actions begin). **B is Jan 2016 to the last
+  idea day with 21 sessions after it.**
+- Every number facts() uses is rebuilt as rolling matrices; on 5 sample days the vectorised numbers must equal
+  facts() on the last 400 sessions (the live store's window) to 1e-6. Two exceptions to "exactly": the price filter
+  (≥ ₹50) uses the unadjusted close (what the bot saw that day, not a price scaled by a later split); history counts
+  sessions within the last 400, as in the live store.
+- Not reproducible from history, so left out: the filings check (red flags block very few stocks) and delivery %
+  (its 10% weight in the ranking is neutral for every stock). The market filter is the live one (NIFTYBEES vs its
+  200-day average).
+- An idea dated d (the report is sent after the close) is bought at the close of d+1 and sold at the close of d+21:
+  20 sessions, the track record's horizon. No close on d+1: the idea is skipped. A stock that stops trading before
+  d+21 is sold at its last close (counted and reported). Costs: INDstocks delivery charges on ₹1,00,000 an idea plus
+  0.05% slippage each side (backtest Costs, DP ₹21.83).
+- Benchmark: the Nifty 50 price index over the same two closes (prices only on both sides: no dividends anywhere).
+  Reference: the equal-weighted average of all liquid stocks that day ("buying any liquid stock").
+- Each idea day is one observation: the mean of that day's ideas. Ideas overlap (20-session holds started daily), so
+  t-statistics are Newey-West with 19 lags.
+
+Pass bars, each in A AND in B:
+- BUY has an edge: mean excess over the Nifty 50 after costs > 0 with t ≥ 2.
+- BUY beats buying any liquid stock: mean excess over the liquid average (both before costs) > 0 with t ≥ 2.
+- AVOID is a useful warning: mean excess over the Nifty 50 (before costs: the advice is not to own it) < 0 with t ≤ -2.
+Reported without a bar: hit rates; 5- and 60-session horizons; the watchlist (would-be BUY ideas on days the market
+filter blocked them) against the BUY ideas; ideas per day.
+
+What changes: the report's footer states, in one line each, whether BUY and AVOID passed and by how much. A failed
+bar is stated as plainly as a passed one. Nothing trades on these ideas either way; the autopilot rulebook is untouched.
+
+## Addendum 16 (8 Oct 2026, before any of it runs): Dalio's All Weather, and the investment committee's valuation lens
+
+Owner's request: check Ray Dalio's strategies, then review the live rule and the daily report through the lenses of
+Graham, Buffett, Munger, Fisher, Lynch, Templeton, Marks, Soros, Druckenmiller and Jhunjhunwala. Everything that can
+be tested is tested here against fixed bars; the rest is reasoning, labelled as such in FINDINGS.
+
+Data added: Nifty 50 P/E, P/B and dividend yield, daily from Jan 1999 (niftyindices.com, getpepbHistoricaldataDBtoString;
+research/data/hist/pepb.csv). NSE's G-Sec total-return indices (4-8 yr, 8-13 yr, 15 yr and above) exist in NSE's
+daily index files from Oct 2015 only; the RBI yield history (data.rbi.org.in) is not reachable from here.
+
+Measuring stick (a correction): Addendum 13 compared Sharpe ratios on raw returns (no risk-free rate). That flatters
+any mix holding cash or bonds. Here Sharpe = mean daily return OVER the liquid sleeve (what idle cash earns) / its
+volatility, annualised; Addendum 13's L1-vs-Nifty verdict is re-reported on this basis too.
+
+Part 1 - Dalio (Nov 2015 - Sep 2026 only, the bond data's span; research/allocation20.py's simulate, costs, 5-point
+bands and year-end rebalance, G-Sec sleeves at 0.20% a year expense):
+- AW, All Weather adapted: Nifty 50 30 / G-Sec 15 yr+ 40 / G-Sec 4-8 yr 15 / gold 15 (Dalio's 7.5% commodities go
+  to gold: India lists no broad commodity ETF). No leverage.
+- RP, risk parity with bonds: inverse 3-year volatility of Nifty 50, MON100, gold and G-Sec 8-13 yr, monthly.
+- L1g: L1 with its 10% liquid sleeve as G-Sec 4-8 yr (Addendum 13's original design, before 13a).
+- Compared with L1 over the same span. Whatever the result, none of these can replace L1: Addendum 14 lets a rule go
+  live only on the 20-year test, and the bonds cover 11 years. The result is for the owner.
+
+Part 2 - valuation (Graham's margin of safety, Marks' cycle, Templeton's pessimism), 2006 - 2026, periods A and B as
+Addendum 13:
+- V1: at each month-end, the Nifty 50 dividend yield's percentile among all its daily values since Jan 1999 up to that
+  day. Bottom 20% (expensive): Nifty 50 sleeve 45 -> 30 and liquid 10 -> 25. Top 20% (cheap): Nifty 50 45 -> 55 and
+  liquid 10 -> 0. Otherwise L1's weights. Dividend yield, not P/E: NSE moved the Nifty's P/E and P/B to consolidated
+  earnings in 2021 (a level break), and P/E explodes when earnings collapse (38 in Dec 2020).
+- Neighbours: 10% and 30% cut-offs; and the same rule on P/E (top 20% = expensive), reported with the 2021 caveat.
+- V1 replaces L1 only if its cash-adjusted Sharpe is higher than L1's in A AND B, its CAGR is no more than 0.5 point
+  lower in either, and both dividend-yield neighbours also beat L1's Sharpe in A and B. A pass goes to the owner as a
+  rulebook change (Addendum 14 lets the bot change nothing by itself); a fail changes nothing.
+
+Part 3 - the daily report (no test possible, so measurement only): point-in-time company fundamentals (ROCE, debt,
+earnings, pledges) are not available for 2006-2026, so no fundamental claim is added to the report's reasoning. The
+report's own track record adds the 60-session result beside the 20-session one (Addendum 15's untested observation is
+judged on ideas published from now on), and the header shows the Nifty 50's P/E, P/B and dividend yield with their
+percentile since 1999 (a fact, not a signal).

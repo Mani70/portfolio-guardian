@@ -39,6 +39,8 @@ SERIES = {"EQ", "BE"}
 NI_BASE = "https://www.niftyindices.com/BackPage"           # was Backpage.aspx until 2025 (then returns a web page)
 NI_URL = f"{NI_BASE}/getHistoricaldatatabletoString"
 NI_TRI_URL = f"{NI_BASE}/getTotalReturnIndexString"
+NI_PEPB_URL = f"{NI_BASE}/getpepbHistoricaldataDBtoString"   # Addendum 16: P/E, P/B, dividend yield
+NI_PEPB = ["NIFTY 50"]
 NI_TRI = ["NIFTY 50", "NIFTY NEXT 50", "NIFTY200 MOMENTUM 30", "NIFTY 200"]   # Addendum 13: dividends included
 NI_INDICES = ["NIFTY 50", "NIFTY NEXT 50", "NIFTY100 QUALITY 30", "NIFTY 100", "NIFTY100 LOW VOLATILITY 30",
               "NIFTY50 VALUE 20", "NIFTY200 MOMENTUM 30", "NIFTY MIDCAP 100", "NIFTY 1D RATE INDEX"]
@@ -178,9 +180,25 @@ def parse_tri(rows) -> List[dict]:
     return out
 
 
-def index_history(store: Store, start_year: int, end_year: int, tri: bool = False) -> None:
+def parse_pepb(rows) -> List[dict]:
+    """niftyindices.com valuation reply: [{"Index Name": "Nifty 50", "pe": "20.63", "pb": "5.09", "divYield": "1.06",
+    "DATE": "31 Mar 2008"}, ...]."""
+    out = []
+    for r in rows if isinstance(rows, list) else []:
+        try:
+            day = datetime.strptime(str(r.get("DATE", "")).strip(), "%d %b %Y").date()
+        except ValueError:
+            continue
+        pe, pb, dy = _num(r.get("pe")), _num(r.get("pb")), _num(r.get("divYield"))
+        if pe or dy:
+            out.append(dict(date=day.isoformat(), index=r.get("Index Name") or "", pe=pe, pb=pb, div_yield=dy))
+    return out
+
+
+def index_history(store: Store, start_year: int, end_year: int, tri: bool = False, pepb: bool = False) -> None:
     """Year-by-year history of the key indices from niftyindices.com (best effort: reported if refused): prices into
-    index_history.csv, or with tri=True total-return values into tri.csv."""
+    index_history.csv, with tri=True total-return values into tri.csv, with pepb=True P/E, P/B and dividend yield
+    into pepb.csv."""
     import requests
     s = requests.Session()
     s.headers.update({"User-Agent": "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -194,8 +212,10 @@ def index_history(store: Store, start_year: int, end_year: int, tri: bool = Fals
     except Exception as e:                                       # noqa: BLE001
         print(f"niftyindices home page: {e}", flush=True)
     refused = 0
-    src, url, out_file = ("tri", NI_TRI_URL, "tri.csv") if tri else ("ni2", NI_URL, "index_history.csv")
-    for name in (NI_TRI if tri else NI_INDICES):
+    src, url, out_file, names, parse = (("pepb", NI_PEPB_URL, "pepb.csv", NI_PEPB, parse_pepb) if pepb else
+                                        ("tri", NI_TRI_URL, "tri.csv", NI_TRI, parse_tri) if tri else
+                                        ("ni2", NI_URL, "index_history.csv", NI_INDICES, parse_niftyindices))
+    for name in names:
         got = 0
         for y in range(start_year, end_year + 1):
             key = f"{src}:{name}:{y}"
@@ -204,7 +224,7 @@ def index_history(store: Store, start_year: int, end_year: int, tri: bool = Fals
             cinfo = "{'name':'%s','startDate':'01-Jan-%d','endDate':'31-Dec-%d','indexName':'%s'}" % (name, y, y, name)
             try:
                 r = s.post(url, json={"cinfo": cinfo}, timeout=40)
-                rows = (parse_tri(r.json()) if tri else parse_niftyindices(r.json())) if r.status_code == 200 else []
+                rows = parse(r.json()) if r.status_code == 200 else []
             except Exception as e:                               # noqa: BLE001
                 rows, r = [], None
                 print(f"  niftyindices {name} {y}: {str(e)[:120]}", flush=True)
@@ -276,6 +296,7 @@ def main(argv=None) -> int:
     if a.indices_only:
         index_history(store, start.year, end.year)
         index_history(store, start.year, end.year, tri=True)
+        index_history(store, start.year, end.year, pepb=True)
         return 0
     print(f"NSE history {start} -> {end} into {OUT} (stops at {a.stop_at or 'never'} IST)", flush=True)
     if not a.skip_index_history:

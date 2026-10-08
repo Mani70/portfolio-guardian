@@ -399,8 +399,10 @@ volatility), the official filings, the risks and the level that would invalidate
 look weak are flagged. When nothing qualifies it shows how many stocks each rule removed. In a falling market (Nifty
 ETF below its 200-day average) there are no BUY ideas, only a labelled watchlist. Past ideas are recorded
 (`cache/insights/ideas.csv`) and their 20-session results against the Nifty ETF are reported. The first run downloads
-~400 sessions of NSE files (about 20 minutes). Rules: `trader/insights.py` RULES - a professional-style screen, not a
-tested trading signal.
+~400 sessions of NSE files (about 20 minutes). Rules: `trader/insights.py` RULES - a professional-style screen.
+Tested over 2011-2026 (`research/insights20.py`, FINDINGS Addendum 15): BUY ideas beat the Nifty 50 after costs in
+2011-15 but not reliably in 2016-26, and AVOID ideas did no worse than the Nifty, so neither list is a proven signal
+(the report says so). The rules are not re-tuned to that result.
 
 # Phase 6: Running on an OCI server (Oracle Linux 9)
 

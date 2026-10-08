@@ -50,6 +50,14 @@ RULES = {
     "avoid_near_low": 1.10,         # close <= 110% of the 52-week low
     "top_n": 5,
 }
+# research/FINDINGS.md Addendum 15: the rules above, unchanged, on every session of 2011-2026 (survivorship-free)
+TESTED = ("20-year test (2011-2026): BUY ideas beat the Nifty 50 by +1.9% per 20 sessions after costs in 2011-15 "
+          "but only +0.75% in 2016-26, not statistically reliable - no proven edge. AVOID ideas did the same as the "
+          "Nifty 50 (no proven warning value).")
+
+# research/FINDINGS.md Addendum 16 (dividend-yield tilt on the long-term mix, 2006-2026)
+VALUATION_TESTED = ("helped a little: +0.9 point a year in 2006-15 (mostly 2008), +0.1 in 2016-26.")
+
 ARCH = "https://nsearchives.nseindia.com"
 FEED_ANN = f"{ARCH}/content/RSS/Online_announcements.xml"          # every filing of the day (~1,000)
 FEED_BM = f"{ARCH}/content/RSS/Board_Meetings.xml"                 # board meetings announced, with their date
@@ -466,11 +474,14 @@ def _event_risk(items: List[dict]) -> str:
     return f" Event ahead: {ahead[0]['title'][:80]} ({ahead[0]['date']})." if ahead else ""
 
 
-def compose(rep: Report, flags: Optional[Dict[str, List[dict]]], track: str = "", window: str = "30 days") -> List[str]:
+def compose(rep: Report, flags: Optional[Dict[str, List[dict]]], track: str = "", window: str = "30 days",
+            valuation: str = "") -> List[str]:
     get = (lambda s: flags.get(s, [])) if flags is not None else (lambda s: None)   # noqa: E731
     d = pd.Timestamp(rep.date)
     head = (f"📊 Swing ideas for {d:%a %d %b %Y} (information only - the bot does NOT trade these)\n"
-            f"Screened {rep.universe} NSE stocks, {rep.liquid} liquid. Market: {rep.market.get('why', 'unknown')}.")
+            "A price-and-momentum screen: it does not judge the business, its earnings, debt or valuation.\n"
+            f"Screened {rep.universe} NSE stocks, {rep.liquid} liquid. Market: {rep.market.get('why', 'unknown')}."
+            + (f"\n{valuation}" if valuation else ""))
     msgs = [head]
     if len(rep.buys):
         msgs.append("BUY ideas (days to weeks):\n\n" + "\n\n".join(
@@ -493,8 +504,8 @@ def compose(rep: Report, flags: Optional[Dict[str, List[dict]]], track: str = ""
             why_avoid(s, r, rep.liquid, get(s), held=True, window=window) for s, r in rep.holdings_weak.iterrows()))
     msgs.append((track + "\n\n" if track else "") +
                 "How these are chosen: fixed rules (trend, NSE-style momentum, 52-week high, liquidity, volatility, "
-                "official filings), not tuned to recent results. Not a tested trading signal and not advice; check "
-                "the filings yourself before acting.")
+                "official filings), not tuned to recent results.\n" + TESTED + "\nNot advice; check the filings "
+                "yourself before acting.")
     return _split(msgs)
 
 
@@ -561,6 +572,39 @@ def track_record(panel: Dict[str, pd.DataFrame], path: Path, horizon: int = 20, 
     return ("Track record: " + " ".join(lines)) if lines else ""
 
 
+def track_records(panel: Dict[str, pd.DataFrame], path: Path, horizons=(20, 60)) -> str:
+    """20 sessions (the tested horizon) and 60 (Addendum 15's untested observation, judged on new ideas only)."""
+    lines = [track_record(panel, path, h) for h in horizons]
+    return "\n".join(x for x in lines if x)
+
+
+# ------------------------------------------------------------------ market valuation (Addendum 16: a fact, not a signal)
+def valuation_line(store: Path, today: date, update: bool = True) -> str:
+    """The Nifty 50's P/E, P/B and dividend yield (niftyindices.com) and where each stands among its daily values
+    since 1999. Best effort: empty when the data cannot be had."""
+    vdir = store / "valuation"
+    if update:
+        try:
+            DH, DN = _research()
+            DH.index_history(DN.Store(vdir), 1999, today.year, pepb=True)
+        except Exception as e:                                      # noqa: BLE001 - the report goes out regardless
+            log.warning("valuation history unavailable: %s", e)
+    p = vdir / "pepb.csv"
+    if not p.exists():
+        return ""
+    v = pd.read_csv(p)
+    v = v.assign(date=pd.to_datetime(v["date"])).drop_duplicates("date", keep="last").set_index("date").sort_index()
+    v = v[["pe", "pb", "div_yield"]].astype(float).dropna()
+    if len(v) < 250:
+        return ""
+    last = v.iloc[-1]
+    pct = {k: int(round((v[k] <= last[k]).mean() * 100)) for k in v.columns}
+    return (f"Nifty 50 valuation ({v.index[-1]:%d %b}): P/E {last.pe:.1f} (above {pct['pe']}% of days since 1999), "
+            f"P/B {last.pb:.2f} (above {pct['pb']}%), dividend yield {last.div_yield:.2f}% (above {pct['div_yield']}%; "
+            "a higher yield = cheaper). Context only: in the 20-year test, timing the market on valuation "
+            + VALUATION_TESTED)
+
+
 # ------------------------------------------------------------------ the job
 def run(notify, client=None, today: Optional[date] = None, update: bool = True, store: Path = STORE,
         filings_fn=None) -> str:
@@ -595,8 +639,9 @@ def run(notify, client=None, today: Optional[date] = None, update: bool = True, 
         except Exception as e:                                      # noqa: BLE001
             log.warning("holdings unavailable: %s", e)
     rep = screen(df, mkt, flags, holdings)
-    track = track_record(panel, store / "ideas.csv")
-    for m in compose(rep, flags, track, filings_window(store, today)):
+    track = track_records(panel, store / "ideas.csv")
+    val = valuation_line(store, today, update=update)
+    for m in compose(rep, flags, track, filings_window(store, today), val):
         notify(m)
     record(rep, store / "ideas.csv")
     state_p.write_text(json.dumps({"sent": today.isoformat()}))
