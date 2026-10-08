@@ -40,6 +40,7 @@ def test_strong_stock_is_a_buy_idea_in_an_up_market_with_its_reasons():
     assert "🟢 UP" in text and "Trend: above its 50-day" in text and "idea is wrong below" in text
     assert "🔴 DOWN" in text and "What would change the view" in text
     assert "information only" in text and "Filings (30 days): none on NSE." in text
+    assert "20-year test (2011-2026)" in text and "no proven edge" in text
 
 
 def test_down_market_gives_no_buy_but_a_labelled_watchlist_and_the_reason():

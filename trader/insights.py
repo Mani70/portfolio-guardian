@@ -50,6 +50,11 @@ RULES = {
     "avoid_near_low": 1.10,         # close <= 110% of the 52-week low
     "top_n": 5,
 }
+# research/FINDINGS.md Addendum 15: the rules above, unchanged, on every session of 2011-2026 (survivorship-free)
+TESTED = ("20-year test (2011-2026): BUY ideas beat the Nifty 50 by +1.9% per 20 sessions after costs in 2011-15 "
+          "but only +0.75% in 2016-26, not statistically reliable - no proven edge. AVOID ideas did the same as the "
+          "Nifty 50 (no proven warning value).")
+
 ARCH = "https://nsearchives.nseindia.com"
 FEED_ANN = f"{ARCH}/content/RSS/Online_announcements.xml"          # every filing of the day (~1,000)
 FEED_BM = f"{ARCH}/content/RSS/Board_Meetings.xml"                 # board meetings announced, with their date
@@ -493,8 +498,8 @@ def compose(rep: Report, flags: Optional[Dict[str, List[dict]]], track: str = ""
             why_avoid(s, r, rep.liquid, get(s), held=True, window=window) for s, r in rep.holdings_weak.iterrows()))
     msgs.append((track + "\n\n" if track else "") +
                 "How these are chosen: fixed rules (trend, NSE-style momentum, 52-week high, liquidity, volatility, "
-                "official filings), not tuned to recent results. Not a tested trading signal and not advice; check "
-                "the filings yourself before acting.")
+                "official filings), not tuned to recent results.\n" + TESTED + "\nNot advice; check the filings "
+                "yourself before acting.")
     return _split(msgs)
 
 

@@ -431,3 +431,35 @@ partial sells over 20 years. The first replay found a real bug before any money 
 compared a position's AVERAGE cost with the price on its opening day, which fails once a position is topped up over
 years; it "found" splits during the 2020 crash and inflated share counts (replay 46% a year). Topped-up positions now
 carry their last fill as the check's reference (corporate.ca_ref; regression test in tests/test_allocation.py).
+
+## Addendum 15: the daily insights ideas over 15 years (8 Oct 2026; pre-registered; research/insights20.py)
+
+The BUY/AVOID rules of trader/insights.py, unchanged, screened on every session of Jan 2011 - Sep 2026 (3,867 days;
+survivorship-free EQ panel, official corporate actions). The rolling matrices matched insights.facts() itself on 5
+sample days (largest gap 5e-13). Liquid stocks a day (≥ ₹10 cr traded): median 142 in A, 339 in B. BUY ideas on 73%
+of days (5 a day), the watchlist on 26% (the market filter), AVOID ideas on 98%. Bought at the next close, held 20
+sessions, against the Nifty 50 price index over the same closes (no dividends on either side); one observation per
+idea day, Newey-West t.
+
+| per 20 sessions | A: 2011-2015 | B: 2016-2026 |
+|---|---|---|
+| BUY ideas (gross) / Nifty 50 | +2.52% / +0.24% | +1.74% / +0.62% |
+| BUY vs Nifty 50, after costs | **+1.90%, t 3.69** | **+0.75%, t 1.54** |
+| BUY vs any liquid stock (gross) | +2.30%, t 4.32 | +0.74%, t 1.80 |
+| BUY hit rate (beat the Nifty after costs) | 55% | 49% |
+| Watchlist (BUY blocked by the market filter) vs Nifty, after costs | -0.54%, t -0.66 | +0.27%, t 0.34 |
+| AVOID ideas vs Nifty 50 (gross) | -0.02%, t -0.04 | +0.03%, t 0.07 |
+
+Verdicts against the pre-registered bars:
+- **BUY has an edge: FAIL.** It cleared the bar in 2011-2015 and missed it in 2016-2026 (t 1.54 after costs; 2.30
+  before). The edge shrank by more than half in the later decade and costs take a third of what is left.
+- **BUY beats buying any liquid stock: FAIL** (t 1.80 in B).
+- **AVOID is a useful warning: FAIL.** Over 20 sessions the AVOID stocks did exactly what the Nifty did (excess 0.0%
+  in both periods): being weak and near the 52-week low did not predict a further fall.
+- Not under a bar (reported only): over 60 sessions BUY ideas beat the Nifty by +4.4% (t 2.61) and +3.8% (t 2.43)
+  after costs, and AVOID ideas lagged it by 1.8% in B (t -1.78). The market filter looks right: the would-be BUY
+  ideas it blocked did no better than the Nifty. These are observations after the fact, not passes: claiming them
+  would need a new addendum tested on data not yet seen (the report's own live record is that data).
+
+Outcome (as pre-registered): rules unchanged; the report's footer now says the 20-year test did not prove an edge
+for either list, with these numbers. Nothing trades on the ideas; the autopilot rulebook is untouched.
