@@ -50,9 +50,20 @@ RULES = {
     "avoid_near_low": 1.10,         # close <= 110% of the 52-week low
     "top_n": 5,
 }
-RED_FLAGS = ("auditor", "resignation of statutory", "default", "insolvency", "nclt", "pledge", "invocation",
-             "fraud", "forensic", "sebi order", "show cause", "suspension", "delisting", "downgrade")
-EVENTS = ("financial result", "board meeting", "results")
+ARCH = "https://nsearchives.nseindia.com"
+FEED_ANN = f"{ARCH}/content/RSS/Online_announcements.xml"          # every filing of the day (~1,000)
+FEED_BM = f"{ARCH}/content/RSS/Board_Meetings.xml"                 # board meetings announced, with their date
+EQUITY_LIST = f"{ARCH}/content/equities/EQUITY_L.csv"              # NSE symbols and company names
+NOISE = ("declaration of nav", "certificate under sebi (depositories", "newspaper publication", "isin for debt",
+         "structural digital database", "compliance report", "record date updates", "redemption/payment of interest",
+         "portfolio", "integrated filing", "trading window")
+RED = (("insolvency", "insolvency proceedings"), ("actions initiated/taken or orders passed", "regulatory action/order"),
+       ("default", "default disclosed"), ("fraud", "fraud reported"), ("forensic", "forensic audit"),
+       ("suspension", "suspension"), ("show cause", "show-cause notice"), ("downgrad", "credit rating downgrade"))
+# these remove a stock from BUY ideas for 30 days; the others are shown as cautions to read (a regulator's order can
+# be a small tax demand on a large company)
+BLOCKING = {"insolvency proceedings", "auditor resigned", "default disclosed", "fraud reported", "forensic audit",
+            "suspension"}
 
 
 # ------------------------------------------------------------------ data
@@ -161,6 +172,113 @@ def adjust(panel: Dict[str, pd.DataFrame], ca: pd.DataFrame) -> int:
         panel["volume"].loc[before, r.symbol] /= f
         n += 1
     return n
+
+
+# ------------------------------------------------------------------ official filings (NSE feeds)
+def _norm(name: str) -> str:
+    import re
+    s = re.sub(r"[^a-z0-9 ]", " ", str(name).lower().replace("&", " and "))
+    return " ".join(w for w in s.split() if w not in ("limited", "ltd", "the"))
+
+
+def red_flag(subject: str, text: str) -> Optional[str]:
+    t = f"{subject} {text}".lower()
+    if "auditor" in t and "resign" in t:
+        return "auditor resigned"
+    if "pledge" in t and not any(w in t for w in ("release", "revocation", "revoke")):
+        return "shares pledged"
+    return next((why for key, why in RED if key in t), None)
+
+
+def parse_feed(xml_text: str, names: Dict[str, str], meetings: bool = False) -> List[dict]:
+    """Items of an NSE RSS feed for listed stocks: date, symbol, subject, text, link, red flag (or meeting date)."""
+    import xml.etree.ElementTree as ET
+    out = []
+    for it in ET.fromstring(xml_text).findall("./channel/item"):
+        sym = names.get(_norm(it.findtext("title") or ""))
+        if not sym:
+            continue                                                 # mutual funds, debt-only issuers, InvITs
+        desc = " ".join((it.findtext("description") or "").split())
+        try:
+            when = datetime.strptime((it.findtext("pubDate") or "").strip()[:11], "%d-%b-%Y").date()
+        except ValueError:
+            continue
+        if meetings:
+            meet = desc.split("Meeting Date:")[-1].strip()[:11] if "Meeting Date:" in desc else ""
+            try:
+                md = datetime.strptime(meet, "%d-%b-%Y").date().isoformat()
+            except ValueError:
+                continue
+            out.append(dict(date=when.isoformat(), symbol=sym, subject="Board meeting", text=f"on {md}",
+                            link=it.findtext("link") or "", red="", meeting=md))
+            continue
+        subject = desc.split("|SUBJECT:")[-1].strip() if "|SUBJECT:" in desc else desc[:80]
+        if any(n in subject.lower() for n in NOISE):
+            continue
+        text = desc.split("|SUBJECT:")[0].strip()
+        out.append(dict(date=when.isoformat(), symbol=sym, subject=subject, text=text[:300],
+                        link=it.findtext("link") or "", red=red_flag(subject, text) or "", meeting=""))
+    return out
+
+
+def update_filings(store: Path, fetcher, today: date) -> int:
+    """Today's feeds into the store's filings.csv (the feed holds one day; the store keeps 45). Raises when the
+    feeds can't be read (the report then says filings were NOT checked)."""
+    names_p = store / "equity_list.csv"
+    if not names_p.exists() or (datetime.now().timestamp() - names_p.stat().st_mtime) > 7 * 86400:
+        blob = fetcher.get(EQUITY_LIST)
+        if blob:
+            names_p.write_bytes(blob)
+    lst = pd.read_csv(names_p, encoding="latin-1")
+    lst.columns = [c.strip().upper() for c in lst.columns]
+    names = {_norm(n): str(sym).strip() for sym, n in zip(lst["SYMBOL"], lst["NAME OF COMPANY"])}
+    ann, bm = fetcher.get(FEED_ANN), fetcher.get(FEED_BM)
+    if not ann:
+        raise RuntimeError("NSE announcements feed unavailable")
+    rows = parse_feed(ann.decode("utf-8", "replace"), names) + \
+        (parse_feed(bm.decode("utf-8", "replace"), names, meetings=True) if bm else [])
+    p = store / "filings.csv"
+    old = pd.read_csv(p, dtype=str).fillna("") if p.exists() else pd.DataFrame()
+    new = pd.concat([old, pd.DataFrame(rows, dtype=str)], ignore_index=True)
+    if len(new):
+        new = new.drop_duplicates(["symbol", "subject", "link", "meeting"], keep="last")
+        new = new[new["date"] >= (today - timedelta(days=45)).isoformat()]
+        new.to_csv(p, index=False)
+    state = store / "filings_ok.txt"
+    state.write_text(today.isoformat())
+    return len(rows)
+
+
+def filings_window(store: Path, today: date, days: int = 30) -> str:
+    """'30 days', or 'since 8 Oct' while the store holds less (the NSE feed only has the current day)."""
+    p = store / "filings.csv"
+    if not p.exists():
+        return f"{days} days"
+    first = pd.read_csv(p, usecols=["date"], dtype=str)["date"].min()
+    return f"since {pd.Timestamp(first):%d %b}" if first and first > (today - timedelta(days=days)).isoformat() \
+        else f"{days} days"
+
+
+def filings_index(store: Path, today: date, days: int = 30, ahead_days: int = 14) -> Dict[str, List[dict]]:
+    """symbol -> newest-first filings of the last `days` days and board meetings in the next `ahead_days`."""
+    p = store / "filings.csv"
+    if not p.exists():
+        return {}
+    f = pd.read_csv(p, dtype=str).fillna("")
+    since = (today - timedelta(days=days)).isoformat()
+    out: Dict[str, List[dict]] = {}
+    for r in f.sort_values("date", ascending=False).itertuples():
+        if r.meeting:
+            if today.isoformat() <= r.meeting <= (today + timedelta(days=ahead_days)).isoformat():
+                out.setdefault(r.symbol, []).append(
+                    {"date": r.meeting, "title": f"Board meeting on {r.meeting} (results or other decisions)",
+                     "ahead": True})
+            continue
+        if r.date >= since:
+            title = r.subject + (f" - {r.red}" if r.red else "")
+            out.setdefault(r.symbol, []).append({"date": r.date, "title": title, "red": r.red in BLOCKING,
+                                                 "caution": bool(r.red) and r.red not in BLOCKING, "link": r.link})
+    return out
 
 
 # ------------------------------------------------------------------ facts and rules
@@ -291,7 +409,8 @@ def _rs(x: float) -> str:
     return f"₹{x:,.2f}" if x < 1000 else f"₹{x:,.0f}"
 
 
-def why_buy(s: str, r: pd.Series, n_liquid: int, filings: Optional[List[dict]], watch: bool = False) -> str:
+def why_buy(s: str, r: pd.Series, n_liquid: int, filings: Optional[List[dict]], watch: bool = False,
+            window: str = "30 days") -> str:
     lines = [f"{'👀' if watch else '🟢'} {s}  {_rs(r.close)} ({r.day_pct:+.1f}% today)"]
     lines.append(f"• Trend: above its 50-day ({_rs(r.sma50)}) and 200-day ({_rs(r.sma200)}) averages; the 200-day "
                  f"is rising ({(r.sma200 / r.sma200_prev - 1) * 100:+.1f}% in 4 weeks).")
@@ -303,14 +422,15 @@ def why_buy(s: str, r: pd.Series, n_liquid: int, filings: Optional[List[dict]], 
         lines.append(f"• Buyers: delivery {r.deliv:.0f}% of volume today vs {r.deliv20:.0f}% average"
                      + (" (more shares taken home: accumulation)." if r.deliv > r.deliv20 + 5 else "."))
     lines.append(f"• Liquidity: ₹{r.value_cr:,.0f} cr traded a day; volume today {r.vol_ratio:.1f}x its 20-day average.")
-    lines += _filings(filings)
+    lines += _filings(filings, window)
     stop = max(r.sma50, r.close - 2 * r.atr_pct / 100 * r.close)
     lines.append(f"• Risks: moves {r.atr_pct:.1f}% a day on average; the idea is wrong below {_rs(stop)} (the 50-day "
                  "average or 2 average days' range, whichever is higher)." + _event_risk(filings or []))
     return "\n".join(lines)
 
 
-def why_avoid(s: str, r: pd.Series, n_liquid: int, filings: Optional[List[dict]], held: bool = False) -> str:
+def why_avoid(s: str, r: pd.Series, n_liquid: int, filings: Optional[List[dict]], held: bool = False,
+              window: str = "30 days") -> str:
     lines = [f"🔴 {s}  {_rs(r.close)} ({r.day_pct:+.1f}% today)" + ("  ← YOU HOLD THIS" if held else "")]
     lines.append(f"• Trend: below its 200-day average ({_rs(r.sma200)}), which is falling "
                  f"({(r.sma200 / r.sma200_prev - 1) * 100:+.1f}% in 4 weeks); 50-day {_rs(r.sma50)}.")
@@ -318,7 +438,7 @@ def why_avoid(s: str, r: pd.Series, n_liquid: int, filings: Optional[List[dict]]
                  f"12 months {r.r252:+.0f}%).")
     lines.append(f"• Weakness: {(r.close / r.lo52 - 1) * 100:.1f}% above its 52-week low ({_rs(r.lo52)}), "
                  f"{(1 - r.close / r.hi52) * 100:.0f}% below its high; {r.rs63:+.0f} points vs the Nifty ETF over 3 months.")
-    lines += _filings(filings)
+    lines += _filings(filings, window)
     lines.append(f"• What would change the view: a close back above the 200-day average ({_rs(r.sma200)}).")
     return "\n".join(lines)
 
@@ -327,14 +447,17 @@ def _pct(x: float) -> int:
     return max(1, int(math.ceil(x)))
 
 
-def _filings(items: Optional[List[dict]]) -> List[str]:
+def _filings(items: Optional[List[dict]], window: str = "30 days") -> List[str]:
     if items is None:
         return ["• Filings: NOT checked today (NSE's filings feed unavailable) - read them before acting."]
     if not items:
-        return ["• Filings (30 days): none on NSE."]
-    out = ["• Filings (30 days, NSE):"]
+        return [f"• Filings ({window}): none on NSE."]
+    out = [f"• Filings ({window}, NSE):"]
     for i in items[:4]:
-        out.append(f"   {'⚠️ ' if i.get('red') else ''}{i['date']}: {i['title'][:110]}")
+        mark = "⛔ " if i.get("red") else "⚠️ " if i.get("caution") else "📅 " if i.get("ahead") else ""
+        out.append(f"   {mark}{i['date']}: {i['title'][:110]}")
+    if len(items) > 4:
+        out.append(f"   (+{len(items) - 4} more on nseindia.com)")
     return out
 
 
@@ -343,7 +466,7 @@ def _event_risk(items: List[dict]) -> str:
     return f" Event ahead: {ahead[0]['title'][:80]} ({ahead[0]['date']})." if ahead else ""
 
 
-def compose(rep: Report, flags: Optional[Dict[str, List[dict]]], track: str = "") -> List[str]:
+def compose(rep: Report, flags: Optional[Dict[str, List[dict]]], track: str = "", window: str = "30 days") -> List[str]:
     get = (lambda s: flags.get(s, [])) if flags is not None else (lambda s: None)   # noqa: E731
     d = pd.Timestamp(rep.date)
     head = (f"📊 Swing ideas for {d:%a %d %b %Y} (information only - the bot does NOT trade these)\n"
@@ -351,23 +474,23 @@ def compose(rep: Report, flags: Optional[Dict[str, List[dict]]], track: str = ""
     msgs = [head]
     if len(rep.buys):
         msgs.append("BUY ideas (days to weeks):\n\n" + "\n\n".join(
-            why_buy(s, r, rep.liquid, get(s)) for s, r in rep.buys.iterrows()))
+            why_buy(s, r, rep.liquid, get(s), window=window) for s, r in rep.buys.iterrows()))
     else:
         msgs.append("No BUY idea today. How the stocks were filtered:\n" + "\n".join(
             f"• {name}: {n}" for name, n in rep.funnel_buy) + "\n" + _no_buy_reason(rep))
         if len(rep.watch):
             msgs.append("WATCHLIST - strongest stocks that pass every other rule; NOT buy ideas while the market is in "
                         "a downtrend (they become ideas when it recovers):\n\n" + "\n\n".join(
-                            why_buy(s, r, rep.liquid, get(s), watch=True)
+                            why_buy(s, r, rep.liquid, get(s), watch=True, window=window)
                             for s, r in rep.watch.iterrows()))
     if len(rep.avoids):
         msgs.append("AVOID / EXIT if held:\n\n" + "\n\n".join(
-            why_avoid(s, r, rep.liquid, get(s)) for s, r in rep.avoids.iterrows()))
+            why_avoid(s, r, rep.liquid, get(s), window=window) for s, r in rep.avoids.iterrows()))
     else:
         msgs.append("No AVOID idea today: " + "; ".join(f"{name}: {n}" for name, n in rep.funnel_avoid) + ".")
     if len(rep.holdings_weak):
         msgs.append("Your holdings showing weakness:\n\n" + "\n\n".join(
-            why_avoid(s, r, rep.liquid, get(s), held=True) for s, r in rep.holdings_weak.iterrows()))
+            why_avoid(s, r, rep.liquid, get(s), held=True, window=window) for s, r in rep.holdings_weak.iterrows()))
     msgs.append((track + "\n\n" if track else "") +
                 "How these are chosen: fixed rules (trend, NSE-style momentum, 52-week high, liquidity, volatility, "
                 "official filings), not tuned to recent results. Not a tested trading signal and not advice; check "
@@ -455,6 +578,11 @@ def run(notify, client=None, today: Optional[date] = None, update: bool = True, 
     df = facts(panel)
     mkt = market(panel)
     flags = None                                                    # None = filings not checked (said in the text)
+    if filings_fn is None and update:
+        def filings_fn(day):
+            _, DN = _research()
+            update_filings(store, DN.Fetcher(0.4), day)
+            return filings_index(store, day)
     if filings_fn is not None:
         try:
             flags = filings_fn(today)
@@ -468,7 +596,7 @@ def run(notify, client=None, today: Optional[date] = None, update: bool = True, 
             log.warning("holdings unavailable: %s", e)
     rep = screen(df, mkt, flags, holdings)
     track = track_record(panel, store / "ideas.csv")
-    for m in compose(rep, flags, track):
+    for m in compose(rep, flags, track, filings_window(store, today)):
         notify(m)
     record(rep, store / "ideas.csv")
     state_p.write_text(json.dumps({"sent": today.isoformat()}))

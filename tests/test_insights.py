@@ -104,3 +104,38 @@ def test_track_record_and_once_a_day(tmp_path):
     assert line.startswith("Track record:") and "BUY ideas (" in line and "vs Nifty ETF" in line
     (tmp_path / "state.json").write_text('{"sent": "2026-10-08"}')
     assert I.run(print, today=date(2026, 10, 8), update=False, store=tmp_path) == "insights: already sent today"
+
+
+FEED = """<rss version="2.0"><channel>
+<item><title>Up Industries Limited</title><link>https://x/1.pdf</link>
+<description>UP INDUSTRIES LIMITED has informed the Exchange about Resignation of Statutory Auditor |SUBJECT: Resignation of Statutory Auditor</description>
+<pubDate>08-Oct-2026 16:55:21</pubDate></item>
+<item><title>Down Corp Ltd</title><link>https://x/2.xml</link>
+<description>DOWN CORP has informed the Exchange about Action(s) initiated or orders passed |SUBJECT: Actions initiated/taken or orders passed-XBRL</description>
+<pubDate>08-Oct-2026 12:00:00</pubDate></item>
+<item><title>Some Mutual Fund</title><link>https://x/3</link>
+<description>NAV |SUBJECT: Declaration of NAV</description><pubDate>08-Oct-2026 10:00:00</pubDate></item>
+<item><title>Flat Zero Limited</title><link>https://x/4</link>
+<description>FLAT ZERO has informed |SUBJECT: Declaration of NAV</description><pubDate>08-Oct-2026 10:00:00</pubDate></item>
+</channel></rss>"""
+BM = """<rss version="2.0"><channel><item><title>Up Industries Limited</title><link>https://x/5</link>
+<description>Board Meeting Intimation |Meeting Date: 15-Oct-2026</description><pubDate>08-Oct-2026 11:00:00</pubDate></item>
+</channel></rss>"""
+
+
+def test_nse_feeds_become_flags_blocking_and_caution(tmp_path):
+    names = {I._norm(n): s for s, n in [("UP", "Up Industries Limited"), ("DOWN", "Down Corp Limited"),
+                                         ("FLAT0", "Flat Zero Limited")]}
+    rows = I.parse_feed(FEED, names) + I.parse_feed(BM, names, meetings=True)
+    assert [(r["symbol"], r["red"]) for r in rows if not r["meeting"]] == [("UP", "auditor resigned"),
+                                                                          ("DOWN", "regulatory action/order")]
+    pd.DataFrame(rows).to_csv(tmp_path / "filings.csv", index=False)
+    idx = I.filings_index(tmp_path, date(2026, 10, 8))
+    up = idx["UP"]
+    assert any(i.get("red") for i in up) and any(i.get("ahead") and "2026-10-15" in i["title"] for i in up)
+    assert idx["DOWN"][0]["caution"] and not idx["DOWN"][0]["red"]
+    p = _panel(market_up=True)
+    rep = I.screen(I.facts(p), I.market(p), idx)
+    assert "UP" not in rep.buys.index                                   # blocked by the auditor's resignation
+    text = "\n".join(I.compose(rep, idx))
+    assert "⚠️ 2026-10-08: Actions initiated/taken or orders passed-XBRL - regulatory action/order" in text
