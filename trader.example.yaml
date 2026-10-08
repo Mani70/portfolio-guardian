@@ -41,7 +41,27 @@ gates:                      # default paper record needed before live orders
   live_max_drawdown_pct: 8  # a live strategy losing this % of its capital goes back to paper
 
 strategies:
+  # 0) Long-term core (research/FINDINGS.md Addendum 13, rule L1; with dividends, survivorship-free):
+  #    2006-2015 14.9%/yr, worst fall -48%, Sharpe 0.85; 2016-2026 15.2%, -27%, 1.26
+  #    (Nifty 50 held: 12.1% / -60% / 0.59 and 11.4% / -38% / 0.77). Fixed 80%-equity ETF mix; month-end check;
+  #    all back to target when one ETF is 5+ points off, and every year-end. Buys top up what it holds.
+  #    It replaces trend_allocation and momentum_rotation (both failed Addendum 12): set their live: false and
+  #    move their holdings over with `trader.run transfer --from trend_allocation --to core_allocation`.
+  core_allocation:
+    enabled: false
+    live: false
+    capital_share: 1.0
+    max_order_value: 400000      # its own cap: the first purchase puts 45% into NIFTYBEES in one order
+    max_drawdown_pct: 100        # never auto-demote: demotion sells everything, i.e. at the bottom of a crash
+    params:
+      weights: {NIFTYBEES: 0.45, JUNIORBEES: 0.15, MON100: 0.20, GOLDBEES: 0.10, LIQUIDCASE: 0.10}
+      band: 0.05                 # rebalance when any ETF is more than 5 points off its target
+      year_end: true             # and on the last session of every year
+      min_trade: 2000            # skip top-ups / trims smaller than this (rupees)
+    gate: {count: orders, min_trades: 3, min_days: 0, min_t: null, require_profit: false}  # execution check only
+
   # 1) Cross-asset ETF trend (research: 2016-2026 13.5-15.7%/yr, worst fall 13-16%; Nifty ETF 11.4%, -36%)
+  #    Addendum 12 (survivorship-free, 2011-2015): FAILED its benchmark - replaced by core_allocation.
   trend_allocation:
     enabled: true
     live: false

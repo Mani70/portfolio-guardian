@@ -2,7 +2,7 @@
 # Runs one scheduled job: logs to logs/cron/<job>.log, never two copies of the same job at once,
 # a time limit per job, and a Telegram alert if the job fails or times out.
 #
-#   deploy/oci/job.sh intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|reboot
+#   deploy/oci/job.sh intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|reboot
 set -uo pipefail
 
 APP="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -23,7 +23,9 @@ case "$job" in
   report)      limit=10m; cmd=(-m trader.run report) ;;
   universe)    limit=5m;  cmd=(-m trader.run universe) ;;
   holidays)    limit=5m;  cmd=(-m trader.run holidays) ;;
-  *) echo "usage: $0 intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|reboot" >&2; exit 2 ;;
+  autodeploy)  limit=40m; cmd=(deploy/oci/autodeploy.py) ;;
+  retest)      limit=10h; cmd=(-m trader.run retest) ;;
+  *) echo "usage: $0 intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|reboot" >&2; exit 2 ;;
 esac
 
 mkdir -p logs/cron

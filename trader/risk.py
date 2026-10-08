@@ -10,6 +10,10 @@ from typing import Dict, List, Optional, Tuple
 from .models import BUY, CNC, INTRADAY, OrderRequest, Position
 
 
+ALL_CASH = 1e12                                    # live plan when capital.all_cash: sizing then follows the account
+TOPUP_CLASSES = {"core_allocation"}              # strategies that may buy more of an ETF they already hold
+
+
 def _t(s: str) -> time:
     h, m = map(int, s.split(":"))
     return time(h, m)
@@ -35,7 +39,10 @@ class Risk:
         return (self.root / self.lim["kill_switch_file"]).exists()
 
     def capital(self, engine: str) -> float:
-        return float(self.cfg["capital"].get(engine, 0))
+        cap = self.cfg["capital"]
+        if engine == "swing" and cap.get("all_cash") and getattr(self.j, "mode", "") == "live":
+            return ALL_CASH                              # autopilot: the whole account, scaled to what it holds
+        return float(cap.get(engine, 0))
 
     def account_scale(self, engine: str = "swing") -> float:
         """1.0 normally; below 1 when the account holds less than the live swing plan."""
@@ -45,6 +52,8 @@ class Risk:
 
     def strategy_capital(self, name: str, engine: str) -> float:
         """The planned capital, scaled down to the money in the account when that is less (live, swing)."""
+        if engine == "swing" and self.capital("swing") >= ALL_CASH and self.account_equity is None:
+            return 0.0                                   # all_cash but the account couldn't be read: size nothing
         return self.planned_capital(name, engine) * self.account_scale(engine)
 
     def planned_capital(self, name: str, engine: str) -> float:
@@ -129,8 +138,9 @@ class Risk:
         if self.kill_switch():
             return False, f"kill switch file '{self.lim['kill_switch_file']}' present"
         value = req.qty * req.limit_price
-        cap_value = float(self.lim["max_order_value"])
-        park = (self.cfg["strategies"].get(req.strategy) or {}).get("park")
+        sc = self.cfg["strategies"].get(req.strategy) or {}
+        cap_value = float(sc.get("max_order_value") or self.lim["max_order_value"])   # a strategy's own cap wins
+        park = sc.get("park")
         park_sym = (park if isinstance(park, str) else (park or {}).get("symbol", "")) or ""
         if park_sym and req.symbol == park_sym.upper():
             # parking idle cash in a liquid ETF: one order for the whole idle amount, never more than the
@@ -147,8 +157,9 @@ class Risk:
         if ref and abs(req.limit_price / ref - 1) > (0.03 if req.amo else band):
             return False, f"limit {req.limit_price} too far from price {ref}"
         mine = req.strategy if self.shared_symbols else None
+        topup = sc.get("class", req.strategy) in TOPUP_CLASSES      # target-weight strategies add to what they hold
         if any(p.symbol == req.symbol and p.product == req.product and (mine is None or p.strategy == mine)
-               for p in positions):
+               and not (topup and p.strategy == req.strategy) for p in positions):
             return False, "already holding this symbol"
         if self.j.active_orders(mine, req.symbol, "entry", req.product):
             return False, "an entry order for this symbol is already working"

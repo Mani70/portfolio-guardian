@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-JOBS = ["intraday", "watch", "swing-check", "swing-plan", "backup", "universe", "holidays"]
+JOBS = ["intraday", "watch", "swing-check", "swing-plan", "backup", "universe", "holidays", "autodeploy"]
 END = re.compile(r"^===== (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) end (\S+) rc=(\d+)")
 
 
@@ -243,6 +243,9 @@ def main(argv) -> int:
         mode = cfg.get("mode", "paper")
         live = [n for n, s in (cfg.get("strategies") or {}).items() if (s or {}).get("live")]
         ok.append(f"mode {mode.upper()}" + (f", live-enabled: {', '.join(live)}" if mode == "live" and live else ""))
+        if cfg.get("_autopilot"):
+            from trader.autopilot import describe
+            ok.append(describe(cfg, ROOT))
         holdings = None
         if client is not None:
             try:

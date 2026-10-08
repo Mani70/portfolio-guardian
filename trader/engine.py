@@ -24,7 +24,7 @@ import re
 import time as _time
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from . import corporate
 from .corporate import describe as describe_ratio
@@ -319,6 +319,9 @@ class Engine:
                 new_qty = pos.qty + signed
                 pos.avg_price = (pos.avg_price * abs(pos.qty) + f.price * f.qty) / abs(new_qty)
                 pos.qty, pos.entry_charges = new_qty, pos.entry_charges + f.charges
+                # a topped-up position's average cost matches no single day: the bonus/split check
+                # (corporate.ca_ref) compares the last fill with its own day's candle instead
+                pos.meta = {**(pos.meta or {}), "ca_px": f.price, "ca_day": f.time.date().isoformat()}
             self.j.save_position(pos)
             self._say(f"{'Bought' if r.side == BUY else 'Sold short'} {f.qty} {r.symbol} @ ₹{f.price:,.2f} "
                       f"({r.strategy}{', stop ₹%.2f' % r.stop if r.stop else ''})")
@@ -545,7 +548,7 @@ class Engine:
                       if o.req.strategy in names and o.status in (NEW, OPEN, PARTIAL))
         self.risk.account_equity = usable + held + pending
         self.risk.live_plan = sum(self.risk.planned_capital(s.name, "swing") for s in self.swing_strategies())
-        if self.risk.account_scale() < 0.95:          # the 3% after-market headroom alone is not worth a note
+        if self.risk.account_scale() < 0.95 and not capcfg.get("all_cash"):   # all_cash: the account IS the plan
             return (f"Account: ₹{free:,.0f} free + ₹{held + pending:,.0f} invested; live strategies are sized at "
                     f"{self.risk.account_scale():.0%} of their ₹{self.risk.live_plan:,.0f} plan.")
         return None
@@ -581,6 +584,11 @@ class Engine:
         placed: List[Order] = []
         lines = []
         for strat in strats:
+            if hasattr(strat, "targets"):                # target-weight strategies (strategies/allocation.py)
+                got, said = self._allocate(strat, frames, d, now, band, positions)
+                placed += got
+                lines += said
+                continue
             park = self._park_cfg(strat)
             park_pos = next((p for p in positions if park and p.strategy == strat.name and p.symbol == park[0]), None)
             mine = {p.symbol: p for p in positions if p.strategy == strat.name and p is not park_pos}
@@ -694,6 +702,104 @@ class Engine:
                       + "\n".join(lines) + (f"\n{sizing}" if sizing else "")
                       + "\nTo stop them: run `python -m trader.run cancel` before 09:00.")
         return placed
+
+    def _allocate(self, strat, frames, d: date, now: datetime, band: float, positions) -> Tuple[List[Order], List[str]]:
+        """A target-weight strategy's evening. On its review (month-end, or a review left open), when the mix has
+        drifted (strat.needs_rebalance): sell what is over target (part of a position) and buy what is under (topping
+        up). Buys that need the money from tonight's sells wait for it: the review stays open and runs again the next
+        evening, when the sales have settled. On other evenings, idle cash above the sweep threshold (new money) buys
+        what is under target - buys only. A strategy winding down (demoted / not allowed live) sells everything."""
+        placed: List[Order] = []
+        lines: List[str] = []
+        exit_only = strat in self.exit_only
+        period = strat.due_period(d)
+        mine = {p.symbol: p for p in positions if p.strategy == strat.name and p.product == CNC}
+        if exit_only and not mine:
+            return placed, lines
+        if self.broker.live:
+            self.risk.note_deployed(strat.name)
+        marks = self.risk.marks
+        vals = {s: abs(p.qty) * marks.get(s, p.avg_price) for s, p in mine.items()}
+        total = self.risk.strategy_capital(strat.name, "swing")
+        if total <= 0:
+            return placed, lines
+        target = {} if exit_only else strat.targets(frames, d)
+        if not exit_only and not target:
+            if period is not None:
+                self._say(f"{strat.name}: no prices today for its ETFs; review tried again tomorrow", force=True)
+            return placed, lines
+        current = {s: v / total for s, v in vals.items()}
+        if period is None and not exit_only:            # not a review evening: only new money is invested
+            idle = total - sum(vals.values())
+            sweep = max(float(strat.params.get("sweep_min", 10_000)), float(strat.params.get("sweep_pct", 0.02)) * total)
+            if idle < sweep or self.j.active_orders(strat.name, product=CNC) or self.sizing_failed:
+                return placed, lines
+            self._buy_to_target(strat, frames, target, vals, total, current, f"invest ₹{idle:,.0f} new cash", now,
+                                band, positions, False, placed, lines)
+            return placed, lines
+        why = "winding down" if exit_only else strat.needs_rebalance(current, target, d, str(period).endswith("-12"))
+        strat._pending_period = period
+        if why is None:
+            strat.commit(ok=True)
+            return placed, lines
+        if self.j.active_orders(strat.name, product=CNC):
+            strat.commit(ok=False)                      # earlier orders still working: try again tomorrow
+            return placed, lines
+        min_trade = float(strat.params.get("min_trade", 2000))
+        trouble = selling = False
+        for s, p in mine.items():                       # sells first: what is over target
+            px = marks.get(s)
+            if px is None or px <= 0:
+                trouble = True
+                continue
+            excess = vals[s] - target.get(s, 0.0) * total
+            if s in target and excess < min_trade:
+                continue
+            qty = abs(p.qty) if s not in target else min(abs(p.qty), int(excess // px))
+            if qty < 1:
+                continue
+            hold = self._ca_hold(p, now, price_check=False)
+            if hold:
+                lines.append(f"SELL {s} held ({hold})")
+                trouble = True
+                continue
+            sig = Signal(strat.name, s, SELL, "exit", 1.0, px, now, CNC,
+                         reason=f"{current.get(s, 0):.0%} -> {target.get(s, 0):.0%}: {why}")
+            o = self.submit(sig, qty, px * (1 - band), now, amo=True, positions=positions)
+            if o is None or o.status in (REJECTED, UNKNOWN):
+                trouble = True
+            if o:
+                placed.append(o)
+                selling = selling or o.status in (NEW, OPEN, PARTIAL, FILLED)
+                lines.append(f"SELL {qty} {s} ({sig.reason})")
+        trouble |= self._buy_to_target(strat, frames, target, vals, total, current, why, now, band, positions,
+                                       selling, placed, lines)
+        strat.commit(ok=not trouble)
+        return placed, lines
+
+    def _buy_to_target(self, strat, frames, target, vals, total, current, why, now, band, positions, selling,
+                       placed, lines) -> bool:
+        """Buy each ETF that is under its target weight up to it. True if a buy could not go out in full (waiting
+        for money): the caller keeps the review open."""
+        min_trade = float(strat.params.get("min_trade", 2000))
+        trouble = False
+        for s, w in sorted(target.items(), key=lambda kv: -kv[1]):
+            px = float(frames[s]["close"].iloc[-1])
+            short = w * total - vals.get(s, 0.0)
+            if short < min_trade:
+                continue
+            qty = int(short / (px * (1 + band) * 1.003))
+            if qty < 1:
+                continue
+            sig = Signal(strat.name, s, BUY, "entry", 1.0, px, now, CNC,
+                         reason=f"{current.get(s, 0):.0%} -> {w:.0%}: {why}")
+            o = self.submit(sig, qty, px * (1 + band), now, amo=True, positions=positions, wait_for_sells=selling)
+            if o is None or o.status in (REJECTED, UNKNOWN) or o.req.qty < qty:
+                trouble = True                          # waits for the sale money / funds: again tomorrow
+            if o:
+                placed.append(o)
+                lines.append(f"BUY {o.req.qty} {s} ~₹{px:,.2f} ({sig.reason})")
+        return trouble
 
     def _unpark(self, park_pos: Position, frames, now: datetime, band: float, positions) -> Optional[Order]:
         pdf = frames.get(park_pos.symbol)

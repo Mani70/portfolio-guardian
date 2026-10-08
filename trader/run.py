@@ -10,6 +10,8 @@
   python -m trader.run flatten        # exit all intraday positions now
   python -m trader.run watch          # market hours: alerts on sharp falls / exit levels in all holdings
   python -m trader.run adopt          # hand your existing stocks to momentum_rotation (asks first)
+  python -m trader.run transfer --from trend_allocation --to core_allocation   # move the bot's positions (asks)
+  python -m trader.run retest         # autopilot: the yearly re-test of its rule (January; --force any time)
   python -m trader.run report         # P&L per strategy vs the Nifty ETF, charges, tax estimate -> Telegram
   python -m trader.run reconcile      # live positions vs real INDstocks holdings (--fix to correct the record)
   python -m trader.run keep --stock X --qty N   # keep N shares out of the bot's pending sell of X (after 16:00)
@@ -69,6 +71,11 @@ def build_engines(cfg: dict, dry_run: bool) -> List[Engine]:
     universe = C.universe(cfg)
     bench = cfg.get("benchmark", "NIFTYBEES")
     jpath = ROOT / cfg["journal"]
+    if cfg.get("_autopilot"):                             # retired strategies' holdings go to the core first
+        from .autopilot import handover
+        moved = handover(cfg, jpath)
+        if moved:
+            notifier.send("\n".join(moved))
     engines = [Engine(cfg, Journal(jpath, "paper"), PaperBroker(market, CostModel()), market, inst, notifier,
                       build(cfg), ROOT, universe, bench)]
     lj = Journal(jpath, "live")
@@ -505,6 +512,56 @@ def cmd_adopt(cfg, args) -> int:
         j.close()
 
 
+from .autopilot import transfer_positions  # noqa: E402 - kept importable from trader.run
+
+
+def cmd_transfer(cfg, args) -> int:
+    """Hand the bot's positions from one strategy to another (e.g. when the long-term core replaces the ETF trend):
+    no orders, cost kept; from the next evening run the new strategy's rules decide what to do with them."""
+    src, dst = args.src, args.dst
+    if not src or not dst or src == dst:
+        print("Usage: trader.run transfer --from STRATEGY --to STRATEGY [--book live|paper]")
+        return 1
+    if dst not in (cfg["strategies"] or {}):
+        print(f"{dst} is not in trader.yaml's strategies.")
+        return 1
+    j = Journal(ROOT / cfg["journal"], args.book)
+    try:
+        busy = [o for o in j.active_orders() if o.req.strategy in (src, dst)]
+        if busy:
+            print("Orders of these strategies are still working; run it again after they settle:")
+            for o in busy:
+                print(f"  {o.req.tag}: {o.status} {o.req.side} {o.req.qty} {o.req.symbol}")
+            return 1
+        pos = j.positions(strategy=src)
+        if not pos:
+            print(f"{src} holds nothing in the {args.book} book.")
+            return 0
+        print(f"{args.book.upper()} positions of {src} to be managed by {dst} from its next evening run:")
+        for p in pos:
+            print(f"  {p.symbol:<12} {abs(p.qty):>6} @ ₹{p.avg_price:,.2f}")
+        if not args.yes and input("Type YES to move them: ").strip() != "YES":
+            print("Nothing changed.")
+            return 1
+        for note in transfer_positions(j, src, dst):
+            print(note)
+        return 0
+    finally:
+        j.close()
+
+
+def cmd_retest(cfg, args) -> int:
+    """Yearly re-test of the autopilot's rule (trader/retest.py; Addendum 14)."""
+    from guardian.notifier import Notifier
+    from .retest import run
+    if not cfg.get("_autopilot"):
+        print("The autopilot is off (trader.yaml: autopilot: {enabled: true}); nothing to re-test.")
+        return 0
+    notifier = Notifier(dry_run=args.dry_run)
+    print(run(ROOT, notify=notifier.send, update=not args.no_update, force=args.force))
+    return 0
+
+
 def cmd_report(cfg, args) -> int:
     """Monthly performance report (see trader/report.py)."""
     import pandas as pd
@@ -726,7 +783,7 @@ def cmd_reconcile(cfg, args) -> int:
         j.close()
 
 
-COMMANDS = {"check": cmd_check, "adopt": cmd_adopt, "report": cmd_report, "reconcile": cmd_reconcile, "universe": cmd_universe, "holidays": cmd_holidays, "indices": cmd_indices, "split": cmd_split, "keep": cmd_keep, "watch": cmd_watch, "test-order": cmd_test_order, "preview": cmd_preview, "status": cmd_status, "cancel": cmd_cancel, "flatten": cmd_flatten,
+COMMANDS = {"check": cmd_check, "adopt": cmd_adopt, "transfer": cmd_transfer, "retest": cmd_retest, "report": cmd_report, "reconcile": cmd_reconcile, "universe": cmd_universe, "holidays": cmd_holidays, "indices": cmd_indices, "split": cmd_split, "keep": cmd_keep, "watch": cmd_watch, "test-order": cmd_test_order, "preview": cmd_preview, "status": cmd_status, "cancel": cmd_cancel, "flatten": cmd_flatten,
             "swing-plan": cmd_swing_plan, "swing-check": cmd_swing_check, "intraday": cmd_intraday}
 
 
@@ -754,6 +811,10 @@ def main(argv=None) -> int:
     ap.add_argument("--skip", default="", help="adopt: comma-separated symbols to leave alone")
     ap.add_argument("--month", default="", help="report: YYYY-MM (default: last month on the 1st-3rd, else this month)")
     ap.add_argument("--release", default="", help="adopt: take back handed-over holdings: SYM,SYM or 'all'")
+    ap.add_argument("--from", dest="src", default="", help="transfer: strategy whose positions move")
+    ap.add_argument("--to", dest="dst", default="", help="transfer: strategy that takes them over")
+    ap.add_argument("--book", default="live", choices=["live", "paper"], help="transfer: which journal book")
+    ap.add_argument("--no-update", action="store_true", help="retest: use the data already downloaded")
     ap.add_argument("--forget", action="store_true",
                     help="cancel: mark earlier-day orders INDstocks no longer knows as cancelled (check the app first)")
     ap.add_argument("--stock", default="", help="split / keep: the stock")

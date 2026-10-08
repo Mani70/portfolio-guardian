@@ -11,7 +11,8 @@ Per trading day, newest first:
   corp_actions.csv   the "Bc" file of NSE's daily PR zip: bonuses, splits, demergers by ex-date (from Jan 2010;
                      PREREGISTRATION.md Addendum 12a - the bhavcopy's previous close is NOT adjusted on ex-dates)
 Once: index_history.csv from niftyindices.com (Nifty 50, Next 50, Quality 30 and others, year by year), for the
-years the daily index files don't cover.
+years the daily index files don't cover, and tri.csv: total-return values (dividends included) of NI_TRI.
+  .venv/bin/python research/download_history.py --indices-only   # just those two
 
 Polite (one request at a time, a pause), resumable (done.json), stops by itself at --stop-at (default 08:40 IST).
 """
@@ -23,6 +24,7 @@ import io
 import json
 import sys
 import tarfile
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, List, Optional
@@ -34,9 +36,12 @@ from download_nse import (ARCH, MON, Fetcher, Store, _num, ist_now, parse_indice
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "research" / "data" / "hist"
 SERIES = {"EQ", "BE"}
-NI_URL = "https://www.niftyindices.com/Backpage.aspx/getHistoricaldatatabletoString"
+NI_BASE = "https://www.niftyindices.com/BackPage"           # was Backpage.aspx until 2025 (then returns a web page)
+NI_URL = f"{NI_BASE}/getHistoricaldatatabletoString"
+NI_TRI_URL = f"{NI_BASE}/getTotalReturnIndexString"
+NI_TRI = ["NIFTY 50", "NIFTY NEXT 50", "NIFTY200 MOMENTUM 30", "NIFTY 200"]   # Addendum 13: dividends included
 NI_INDICES = ["NIFTY 50", "NIFTY NEXT 50", "NIFTY100 QUALITY 30", "NIFTY 100", "NIFTY100 LOW VOLATILITY 30",
-              "NIFTY50 VALUE 20", "NIFTY200 MOMENTUM 30", "NIFTY MIDCAP 100"]
+              "NIFTY50 VALUE 20", "NIFTY200 MOMENTUM 30", "NIFTY MIDCAP 100", "NIFTY 1D RATE INDEX"]
 
 
 def urls_equities(d: date) -> List[str]:
@@ -136,8 +141,11 @@ def daily(store: Store, f: Fetcher, d: date, want_indices: bool, want_ca: bool =
 def parse_niftyindices(payload: dict) -> List[dict]:
     """niftyindices.com history reply: {"d": "[{\\"Index Name\\": ..., \\"HistoricalDate\\": \\"02 Jan 2015\\",
     \\"OPEN\\": ..., \\"CLOSE\\": ...}, ...]"} (the inner list is itself JSON text)."""
-    inner = payload.get("d") if isinstance(payload, dict) else None
-    rows = json.loads(inner) if isinstance(inner, str) else (inner or [])
+    if isinstance(payload, list):                                # the /BackPage/ endpoints reply with the list
+        rows = payload
+    else:
+        inner = payload.get("d") if isinstance(payload, dict) else None
+        rows = json.loads(inner) if isinstance(inner, str) else (inner or [])
     out = []
     for r in rows:
         name = r.get("Index Name") or r.get("INDEX_NAME") or ""
@@ -155,8 +163,24 @@ def parse_niftyindices(payload: dict) -> List[dict]:
     return out
 
 
-def index_history(store: Store, start_year: int, end_year: int) -> None:
-    """Year-by-year history of the key indices from niftyindices.com (best effort: reported if refused)."""
+def parse_tri(rows) -> List[dict]:
+    """niftyindices.com total-return reply: [{"Index Name": "Nifty 50", "Date": "10 Jan 2008",
+    "TotalReturnsIndex": "7483.81", "NTR_Value": ...}, ...]."""
+    out = []
+    for r in rows if isinstance(rows, list) else []:
+        try:
+            day = datetime.strptime(str(r.get("Date", "")).strip(), "%d %b %Y").date()
+        except ValueError:
+            continue
+        tri = _num(r.get("TotalReturnsIndex"))
+        if tri:
+            out.append(dict(date=day.isoformat(), index=r.get("Index Name") or "", tri=tri))
+    return out
+
+
+def index_history(store: Store, start_year: int, end_year: int, tri: bool = False) -> None:
+    """Year-by-year history of the key indices from niftyindices.com (best effort: reported if refused): prices into
+    index_history.csv, or with tri=True total-return values into tri.csv."""
     import requests
     s = requests.Session()
     s.headers.update({"User-Agent": "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -170,27 +194,30 @@ def index_history(store: Store, start_year: int, end_year: int) -> None:
     except Exception as e:                                       # noqa: BLE001
         print(f"niftyindices home page: {e}", flush=True)
     refused = 0
-    for name in NI_INDICES:
+    src, url, out_file = ("tri", NI_TRI_URL, "tri.csv") if tri else ("ni2", NI_URL, "index_history.csv")
+    for name in (NI_TRI if tri else NI_INDICES):
         got = 0
         for y in range(start_year, end_year + 1):
-            key = f"ni:{name}:{y}"
-            if key in store.done.get("ni", []):
+            key = f"{src}:{name}:{y}"
+            if key in store.done.get(src, []):
                 continue
             cinfo = "{'name':'%s','startDate':'01-Jan-%d','endDate':'31-Dec-%d','indexName':'%s'}" % (name, y, y, name)
             try:
-                r = s.post(NI_URL, json={"cinfo": cinfo}, timeout=40)
-                rows = parse_niftyindices(r.json()) if r.status_code == 200 else []
+                r = s.post(url, json={"cinfo": cinfo}, timeout=40)
+                rows = (parse_tri(r.json()) if tri else parse_niftyindices(r.json())) if r.status_code == 200 else []
             except Exception as e:                               # noqa: BLE001
                 rows, r = [], None
                 print(f"  niftyindices {name} {y}: {str(e)[:120]}", flush=True)
             if rows:
-                store.append("index_history.csv", rows)
+                store.append(out_file, rows)
                 got += len(rows)
             else:
                 refused += 1
                 if r is not None:
                     print(f"  niftyindices {name} {y}: HTTP {r.status_code}, no rows", flush=True)
-            store.done.setdefault("ni", []).append(key)
+            if y < date.today().year:                             # the current year is fetched again next run
+                store.done.setdefault(src, []).append(key)
+            time.sleep(0.5)
             tmp = store.done_path.with_suffix(".tmp")
             tmp.write_text(json.dumps(store.done))
             tmp.replace(store.done_path)
@@ -208,6 +235,8 @@ def main(argv=None) -> int:
     ap.add_argument("--stop-at", default="08:40", help="IST time to stop by (resume later); '' = never")
     ap.add_argument("--pause", type=float, default=0.5)
     ap.add_argument("--skip-index-history", action="store_true")
+    ap.add_argument("--indices-only", action="store_true",
+                    help="only the niftyindices.com histories (prices and total return), then exit")
     ap.add_argument("--pack", action="store_true", help="write research/data/hist_pack.tgz and exit")
     ap.add_argument("--extras", action="store_true", help="fetch NSE's symbol-change list and exit")
     a = ap.parse_args(argv)
@@ -244,6 +273,10 @@ def main(argv=None) -> int:
         return now >= stop_dt
 
     store, f = Store(OUT), Fetcher(a.pause)
+    if a.indices_only:
+        index_history(store, start.year, end.year)
+        index_history(store, start.year, end.year, tri=True)
+        return 0
     print(f"NSE history {start} -> {end} into {OUT} (stops at {a.stop_at or 'never'} IST)", flush=True)
     if not a.skip_index_history:
         try:

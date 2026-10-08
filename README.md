@@ -258,9 +258,10 @@ Trades only when a strategy that passed the research gives a signal. Most days i
 Strategies (see `research/FINDINGS.md` for the evidence, `trader.example.yaml` for settings):
 | Strategy | Kind | What it does | Status |
 |---|---|---|---|
-| `trend_allocation` | swing, ETFs | Month-end: hold each of NIFTYBEES, JUNIORBEES, MON100, GOLDBEES (¼ each) while above its 200-day average, else cash | passed research |
-| `momentum_rotation` | swing, stocks | Month-end: top 10 Nifty 50 stocks by risk-adjusted momentum; cash when Nifty < 200-day average | passed research |
-| `gap_reversal` | intraday | 09:20: buy a stock that opened 3%+ lower on a calm market day; stop 1 ATR; exit 15:15 | **paper only** (edge faded since 2024) |
+| `core_allocation` | long-term, ETFs | Fixed mix NIFTYBEES 45 / JUNIORBEES 15 / MON100 20 / GOLDBEES 10 / LIQUIDCASE 10; month-end check, all back to target when one is 5+ points off and every year-end (partial sells, top-ups) | **passed the 20-year test** (Addendum 13) |
+| `trend_allocation` | swing, ETFs | Month-end: hold each of NIFTYBEES, JUNIORBEES, MON100, GOLDBEES (¼ each) while above its 200-day average, else cash | failed the 20-year test (Addendum 12) |
+| `momentum_rotation` | swing, stocks | Month-end: top 10 Nifty 50 stocks by risk-adjusted momentum; cash when Nifty < 200-day average | failed the 20-year test (Addendum 12) |
+| `gap_reversal` | intraday | 09:20: buy a stock that opened 3%+ lower on a calm market day; stop 1 ATR; exit 15:15 | **paper only**; no real-money intraday (Addendum 13) |
 
 ## Setup
 ```bash
@@ -350,6 +351,45 @@ Addendum 10). On paper only for now; for real money add it to momentum_rotation 
   by its tag and never blindly resent.
 - A live strategy that loses 8% of its capital goes back to paper automatically.
 - Everything is in `trader/state/journal.db` (signals, orders, fills, trades); `python -m trader.run status` shows it.
+
+## The final rules (research/FINDINGS.md Addendum 12 and 13)
+| Horizon | Rule | Evidence (2006-2015 out of sample / 2016-2026, with dividends) |
+|---|---|---|
+| Long-term | `core_allocation`: the 80%-equity ETF mix above | 14.9% / -48% worst fall and 15.2% / -27%, against the Nifty 50 held: 12.1% / -60% and 11.4% / -38% |
+| Momentum | the published Nifty200 Momentum 30 ETF beat the Nifty 50 (17.2% and 15.8%); a 200-day brake on it did not | not added as a second live strategy: one live strategy, one set of rules |
+| Intraday | none with real money | SEBI FY23: 71% of individual intraday traders lost money; no method here passed |
+
+### Autopilot (research/PREREGISTRATION.md Addendum 14) - the bot runs the rulebook by itself
+`trader.yaml` then needs only your own settings:
+```yaml
+mode: live
+autopilot: {enabled: true, reserve: 10000}   # rupees never invested; optional paper_capital for the paper control
+```
+| What | How it happens |
+|---|---|
+| Which strategies run | `trader/rulebook.yaml` (versioned): the active rule as one long-term `core`, gap_reversal on paper; `trader.yaml`'s own `strategies:` are ignored |
+| Money | ALL free cash in the INDstocks account above `reserve`. New deposits are invested within a day or two (evening cash sweep, buys only, from Rs 10,000 or 2% of the portfolio); withdrawals shrink it |
+| Old strategies | Their live holdings are handed to the core at cost on the next run (Telegram says so), then they stop |
+| Rebalancing | Month-end check, 5-point bands, every year-end; buys that need sale money wait a day |
+| Changing the rule | Only the yearly re-test (Saturdays in January, `trader.run retest`): L1 vs the Nifty 50 on the full history and the last 5 years; the pre-set fallback F when L1 fails, back to L1 when it passes. Result on Telegram; state in `trader/state/autopilot.json` |
+| New code | `deploy/oci/autodeploy.py`, weekdays 17:15: GitHub `main` is tested in a separate checkout and deployed only if every test passes; else the running version stays and Telegram says why |
+| Your controls | deposits / withdrawals, `STOP` file, `trader.run cancel`, `mode: paper`, merging pull requests |
+
+The first time: update the server once by hand (the command above; it installs the new schedule with the nightly
+deploy), then put the two lines above in `trader.yaml`. From then on nothing is manual.
+
+Switching by hand instead (without the autopilot; after the 16:30 backup, outside market hours):
+1. `git pull` the code (README: Updating the server from GitHub), then in the server's `trader.yaml`: add the
+   `core_allocation` block from `trader.example.yaml` with `enabled: true`, `live: true`; set `live: false` on
+   `trend_allocation` and `momentum_rotation`. The core's paper gate (3 filled orders) can't be met before its
+   first review; `override_gate: true` skips it (Addendum 12: the 20-year test replaces paper months; the engine
+   replay, `research/replay_core.py`, checks the code against the research).
+2. `python -m trader.run transfer --from trend_allocation --to core_allocation` (asks first): the ETFs the trend
+   strategy holds become the core's, at their cost, so they are trimmed or topped up instead of sold and re-bought.
+3. `python -m trader.run preview`: what the core would trade at the next month-end with today's prices.
+At the month's last session the core buys its mix (orders for the next open, listed on Telegram as always;
+`trader.run cancel` before 09:00 stops them). Buys that need money from same-evening sells wait a day.
+Taxes: each rebalance can realise gains (about 16% of the portfolio is traded a year).
 
 # Phase 6: Running on an OCI server (Oracle Linux 9)
 

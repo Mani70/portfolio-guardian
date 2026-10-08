@@ -381,3 +381,75 @@ read from the Bc files. Those numbers are discarded. Fixes, none of which touche
    before) and closed at 109.75, so its factor is the ex-date close / previous close (0.172). Every other demerger
    among the tested stocks opened and closed at a similar gap (checked, 38 events). Left as real: 63MOONS 2013, DHFL 2018, Infibeam 2018, JETAIRWAYS 2019,
    YESBANK 2020. Before 2010 the detection rule decides, as pre-registered.
+
+## Addendum 13 (8 Oct 2026, before any of this data is downloaded): the final rules per horizon
+
+Owner's request: settle intraday, momentum swing and long-term investing on what the evidence supports, then
+automate what passes. Owner's choices: a growth core (~80% equity); live strategies go to whatever passes here.
+Data (none of it seen yet): NSE's total-return indices (TRI, dividends included) from niftyindices.com - Nifty 50,
+Nifty Next 50, Nifty200 Momentum 30, a 4-8 yr G-Sec index - and ETF prices from the bhavcopy (Addendum 12a/12b
+adjusted) for GOLDBEES (from 2007) and MON100 (from 2011). Each equity sleeve earns its index TRI minus an expense
+ratio rounded up: Nifty 50 0.10%, Next 50 0.20%, Momentum 30 0.45%, G-Sec 0.20% a year; GOLDBEES and MON100 are their
+own ETF prices. Idle cash earns the overnight rate minus 0.23% (history20.py RATE_PATH), as if parked in a liquid ETF.
+Periods as Addendum 12: A = Jan 2006 - Dec 2015 (out of sample), B = Jan 2016 - Sep 2026. ETF costs, Rs 4.2L.
+Before a sleeve exists, its weight is spread pro rata over the sleeves that do (gold before Mar 2007, global before
+Mar 2011).
+
+Intraday - decided on evidence, not tested again: no real-money intraday. SEBI found 71% of individual intraday
+traders lost money in FY23 (80% above 500 trades a year), and no method in Addendum 3/7/12 passed. gap_reversal stays
+on paper; nothing here can switch it on.
+
+Momentum swing - hold the published index instead of picking stocks (Addendum 12: the DIY rule failed):
+- M1: hold the Nifty200 Momentum 30 ETF. Benchmark: Nifty 50 TRI held. M1 is a valid momentum sleeve only if its
+  Sharpe AND CAGR beat the benchmark in A and in B.
+- M2: M1 with a trend brake: on the last session of each month, hold it while the Momentum 30 TRI closes above its
+  200-session average, else the money goes to the liquid ETF. M2 replaces M1 only if its Sharpe is higher in A and B,
+  its CAGR is not lower by more than 1 point in either, and the 150- and 250-session neighbours also beat M1's Sharpe
+  in both.
+
+Long-term core (80% equity), checked on the last session of each month; all sleeves go back to target when any one
+is more than 5 points off its target weight, and on the last session of each year in any case:
+- L1: Nifty 50 45%, Next 50 15%, MON100 20%, GOLDBEES 10%, G-Sec 10%.
+- L2: L1 with momentum: Nifty 50 30%, Next 50 15%, Momentum 30 15% (the M rule that passed; M1 if neither), MON100 20%,
+  GOLDBEES 10%, G-Sec 10%.
+- Benchmark: Nifty 50 TRI held. L1 is adopted if its Sharpe beats the benchmark in A and B and its worst fall is
+  shallower in both. L2 replaces L1 only if its Sharpe is higher in A and B and its worst fall is no deeper by more
+  than 2 points in either. Reported too: turnover and number of rebalances (each sale can realise taxable gains).
+
+What goes live (owner: "go with the best"): the long-term rule that passes becomes the live strategy for the swing
+capital at the 30 Oct 2026 review, replacing trend_allocation and momentum_rotation, after an engine replay over the
+20 years matches the research within 1 point a year. If no long-term rule passes, both live strategies move to paper
+and the cash is parked in the liquid ETF; the owner decides from there. A momentum sleeve outside the core is not
+added: one live strategy, one set of rules.
+
+## Addendum 13a (8 Oct 2026, before any Addendum 13 data is downloaded)
+
+niftyindices.com serves price and total-return history for equity indices only; its G-Sec indices return nothing
+(checked: "Nifty 4-8 yr G-Sec Index", "Nifty 8-13 yr G-Sec", both endpoints, 2006 and 2016). So the 10% G-Sec sleeve of
+L1/L2 is the liquid ETF instead: it earns the overnight rate minus 0.23% (as idle cash), and live it is LIQUIDCASE.
+This understates the sleeve in falling-rate years; nothing else changes.
+
+## Addendum 14 (8 Oct 2026, before any of it runs): autopilot - how the bot may change its own rules
+
+Owner's decision: the bot runs without manual steps, manages all free cash in the INDstocks account above a reserve,
+and changes strategy only through a yearly re-test fixed here. Nothing else may change the rules: no reaction to
+recent profits or losses, no new strategies, no re-tuning of weights, bands or thresholds.
+
+Rulebook (trader/rulebook.yaml, versioned in git):
+- L1 (Addendum 13) is the active rule: NIFTYBEES 45 / JUNIORBEES 15 / MON100 20 / GOLDBEES 10 / LIQUIDCASE 10,
+  5-point bands, every year-end.
+- F, the fallback: NIFTYBEES 80 / LIQUIDCASE 20, same bands (the owner's 80% equity, without the parts whose edge
+  the re-test found gone).
+- trend_allocation and momentum_rotation are retired (Addendum 12): their live holdings are handed to the active rule
+  at cost; gap_reversal stays paper only.
+
+Yearly re-test (first Saturday of January, data to the last session of December; research/allocation20.py
+unchanged, same costs and expense ratios; benchmark = Nifty 50 TRI held):
+- Test 1, full sample (Jan 2006 to the end): L1's Sharpe above the benchmark's AND L1's worst fall shallower.
+- Test 2, the last 5 calendar years: L1's Sharpe above the benchmark's.
+- Switch to F when test 1 fails, or when test 2 fails in two consecutive yearly re-tests. Switch back to L1 when
+  both tests pass again. Switching changes the target weights only; the bands then move the money (so a switch is
+  an ordinary rebalance, traded at the next evening run).
+- Data update rule: the bhavcopy, corporate-action and niftyindices downloads of Addenda 12-13 are extended to the
+  new year; idle cash after 2025 earns NSE's "Nifty 1D Rate Index" (overnight rate) minus 0.23% instead of the
+  hand-entered RATE_PATH. A re-test that cannot get its data changes nothing and says so.

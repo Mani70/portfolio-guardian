@@ -90,16 +90,23 @@ def final_symbol(sym: str, changes: Dict[str, tuple]) -> str:
     return sym
 
 
-def load_panel(hist: Path, fields=("open", "high", "low", "close", "prevclose", "value")) -> Dict[str, pd.DataFrame]:
-    """Wide matrices (dates x symbols) of every field, renamed symbols joined, adjusted for corporate actions."""
+def load_panel(hist: Path, fields=("open", "high", "low", "close", "prevclose", "value"),
+               symbols: Optional[List[str]] = None) -> Dict[str, pd.DataFrame]:
+    """Wide matrices (dates x symbols) of every field, renamed symbols joined (raw prices: adjust_prices() adjusts).
+    symbols: only these (and their earlier names) - a light load for a few ETFs."""
+    changes = symbol_changes(hist)
+    keep = None
+    if symbols:
+        keep = set(symbols) | {old for old in changes if final_symbol(old, changes) in set(symbols)}
     parts = []
     for p in sorted(hist.glob("equities_*.csv")):
         df = pd.read_csv(p, usecols=["date", "symbol", "series", *fields],
                          dtype={"symbol": "string", "series": "string"})
+        if keep is not None:
+            df = df[df["symbol"].isin(keep)]
         parts.append(df)
     raw = pd.concat(parts, ignore_index=True)
     raw["date"] = pd.to_datetime(raw["date"])
-    changes = symbol_changes(hist)
     if changes:
         # rows of an old symbol BEFORE its change date belong to the company's final symbol (a symbol NSE later
         # gives to another company keeps its own later rows)

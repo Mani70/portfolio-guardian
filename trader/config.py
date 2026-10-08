@@ -57,7 +57,8 @@ def load(path: Path = None) -> dict:
     if cfg["mode"] not in ("paper", "live"):
         raise ValueError(f"mode must be 'paper' or 'live', not {cfg['mode']!r}")
     cfg["_path"] = str(path)
-    return cfg
+    from .autopilot import apply                          # autopilot: the rulebook decides the strategies
+    return apply(cfg, ROOT)
 
 
 def universe(cfg: dict, root: Path = ROOT, nse: bool = True) -> list:
