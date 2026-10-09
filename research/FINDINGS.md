@@ -515,3 +515,32 @@ tilt settings, Engine._allocate, risk checks, paper broker with real costs): A 1
 (L1: 168; the tilt's switches add about 7 trades a year in the years it acts). The yearly re-test now evaluates L1
 with the tilt: on data to Dec 2025 both tests pass (Sharpe 1.08 vs 0.70 and 1.47 vs 1.06; worst fall -44.1% vs
 -59.5%). Today (8 Oct 2026): dividend yield 1.22, above 33% of days since 1999 - neutral, no change to the mix.
+
+## Addendum 17: NSE quality / value / low-volatility indices, before and after launch (9 Oct 2026; pre-registered; research/factor_indices17.py)
+
+Total return, each index against its parent, the factor index charged 0.30 point a year more (an ETF on it costs more).
+
+| index (launched) | LIVE: excess a year, t | LIVE: worst fall vs parent | back-calculated: excess a year | verdict |
+|---|---|---|---|---|
+| Nifty100 Quality 30 (Mar 2015) | -1.47%, t -0.77 | -32.9% vs -37.9% | +4.32% | NO EDGE |
+| Nifty50 Value 20 (Mar 2014) | +0.88%, t +0.43 | -29.6% vs -38.3% | +6.47% | CONSISTENT, NOT PROVEN |
+| Nifty100 Low Volatility 30 (Jul 2016) | -0.11%, t -0.06 | -30.7% vs -37.9% | +2.94% | NO EDGE |
+| Nifty Alpha Low-Volatility 30 (Jul 2017) | -0.13%, t -0.05 | -31.0% vs -38.0% | +4.35% | NO EDGE |
+| Nifty Quality Low-Volatility 30 (Jul 2017) | -1.95%, t -0.75 | -29.4% vs -38.0% | +2.06% | NO EDGE |
+| Nifty200 Quality 30 (Apr 2018) | -1.51%, t -0.52 | -29.1% vs -38.0% | +3.90% | NO EDGE |
+| Nifty Midcap150 Quality 50 (Oct 2019) | **-7.44%, t -3.44** | -35.2% vs -38.5% | +2.43% | NO EDGE |
+| Nifty Dividend Opportunities 50 (Mar 2011) | -0.79%, t -0.45 | -35.9% vs -38.1% | +10.89% | NO EDGE |
+
+- **Every index looked better than its parent in its back-calculated years (+2 to +11 points a year) and none showed
+  an edge after launch.** Seven of eight returned less than the parent once live; the one positive (Value 20, +0.9 a
+  year) is indistinguishable from chance (t 0.43). The Midcap150 Quality index lagged by 7.4 points a year (t -3.4).
+  This is the size of the hindsight in a back-calculated history: the index designers' rules were chosen on data
+  whose outcome they knew.
+- What did survive launch: every quality, value and low-volatility index fell less than its parent in the worst
+  drawdown (by 2-9 points). Mechanical quality selection in India has delivered smaller falls, not higher returns.
+- Reported only (too little live history): Nifty200 Value 30 (+3.0% a year over 27 months, t 0.45), Nifty500
+  Quality 50 (-2.1% over 22 months).
+
+Outcome as pre-registered: nothing changes live. For Addendum 18: published quality and value screens, run by NSE
+with full company data, did not beat their universe after launch, so a company-level framework built on the same
+measures starts with a low prior; the defensible claim to test is smaller drawdowns as much as higher returns.
