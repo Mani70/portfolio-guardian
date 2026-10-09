@@ -569,3 +569,63 @@ Engine replay (research/replay_core.py --rulebook: the rulebook's own weights an
 16.03% / -46.1% (research 16.16% / -46.0%), B 15.82% / -27.6% (research 15.86% / -27.6%): within 1 point a year.
 Yearly re-test on data to Dec 2025, the new rule: test 1 Sharpe 1.11 vs 0.70, worst fall -46.0% vs -59.5% (pass);
 test 2 Sharpe 1.52 vs 1.06 (pass).
+
+## Addendum 18: the owner's 7-pillar framework, scored blind from NSE filings (9 Oct 2026; pre-registered; research/framework18.py)
+
+Data: 15,691 company-years of annual results (FY2005-FY2025, standalone, as filed) for the 1,272 companies that were
+among NSE's 500 most traded in any July 2008-2025 (survivorship-free: Satyam, Kingfisher, DHFL included); 99% with
+revenue and profit. Gaps: about 5% of company-years (mostly FY2005-FY2017) whose documents NSE no longer serves; a
+re-download confirmed them missing. On each decision date 431-489 of the 500 had a recent enough result; 87%
+qualified. Code check: a smoke test on the first 40 companies found that a missing reserves figure disqualified a
+company as "zero net worth", against the written rule; fixed before the full run.
+
+| CAGR / worst fall / Sharpe over cash | A: Jul 2008 - Jul 2016 | B: Jul 2016 - Oct 2026 |
+|---|---|---|
+| Universe: all 500, equal weights (no costs) | 8.4% / -57.3% / 0.19 | 14.6% / -59.6% / 0.55 |
+| **Framework: top 20 qualified, after costs** | **12.3% / -57.7% / 0.34** | **11.4% / -68.5% / 0.39** |
+| Nifty 500 TRI (with dividends) | 12.3% / -46.6% / 0.36 | 13.1% / -38.1% / 0.54 |
+
+Verdicts against the pre-registered bars:
+- **Portfolio beats the universe: FAIL.** It did in A (+3.9 points a year) and not in B (-3.1 points, and a deeper
+  fall: -68.5% vs -59.6%, Jan 2018 - Mar 2020, the small- and midcap bear market). It never beat the Nifty 500 index.
+- **Score ranks next year's returns: PASS.** Rank correlation +0.09 on average over 17 years, t 4.1, positive in A
+  (+0.13) and B (+0.05); negative in 2020 and 2021 and fading since. The score does sort companies a little, but
+  the effect is small, it has weakened, and 20 stocks do not capture it reliably.
+- **Finds multibaggers: FAIL.** Top fifth by score went 3x in 5 years 15.8% of the time vs 14.6% for everyone (x1.08)
+  in A, 23.5% vs 25.1% (x0.94) in B. 78-81% of the 3x stocks were outside the top fifth.
+
+Named companies (rank among ~450 scored; next 12 months; 5 years):
+- Titan and Asian Paints sat in the middle every year (#90-#330): high returns on equity, but always "expensive",
+  so the valuation pillar held them back during their 4-5x runs. Both missed.
+- Eicher Motors ranked #241-#389 in 2008-2011, its 15-25x years; it reached #39-#86 in 2012-2016, after most of the
+  run, and gave flat 5-year returns from 2015-2017. Missed, then late.
+- Bajaj Finance ranked #80-#344 through its 10-16x run (2010-2016). Missed.
+- HDFC Bank ranked #22-#125 every year (steady, a fair call); Infosys mostly in the top 70.
+- Satyam ranked #20 in Jul 2008 (bought: -79% in a year) and #1 in Jul 2009 on its falsified FY2008 accounts. The
+  filings cannot reveal fraud.
+- DHFL ranked #1-#26 from 2013 to 2018 (+151% in its first year, then bought in 2018: -92%). Yes Bank ranked #24-#77
+  from 2011 to 2016 and #77-#122 in 2018-2019, as the bank was failing. Lenders' asset quality (bad loans,
+  related-party lending) is not in profit-and-loss numbers; the framework rated growing lenders highly to the end.
+- Kingfisher Airlines: disqualified every year (losses, negative net worth). The disqualifiers did their job here.
+- False positives: 11 of 340 top-20 picks lost half or more in a year (Satyam 2008, Vedanta 2008, Rolta 2008, OnMobile
+  2011, Everonn, Geodesic, Glodyne 2012, PFS 2017, Graphite 2018, DHFL 2018, Hindustan Oil 2019).
+- Missed winners: 602 company-dates in the bottom half went 3x in 5 years (e.g. Eicher 2009-10, Bajaj Finance,
+  CG Power 2019, Adani Green 2019, Titagarh 2019, Tata Motors DVR 2020).
+
+Sensitivity (not judged, exploratory; one pillar at a time can be noise):
+- Equal pillar weights, or dropping any one pillar, does not rescue B consistently; the top-N choice swings B from
+  8.4% (top 10) to 15.5% (top 30), so no portfolio size is reliable.
+- Valuation alone is the most unstable: -12.7% a year in A, +22.3% in B (cheap stocks crashed in 2008-2013, then
+  boomed). Moat measured as high ROE alone was weak in both periods (2.1%, 8.8%).
+- Financial strength, governance and downside resilience alone each gave smaller worst falls (-28% to -58%) and a
+  Sharpe near or above the universe in both periods: the defensive pillars did their defensive job.
+
+What this means for the framework (retain / revise / reject before using it on today's market):
+- Retain: the disqualifiers (losses, negative net worth, weak interest cover), the governance, balance-sheet and
+  resilience measures as risk filters, and the blind, dated method itself.
+- Revise: lenders need their own measures (gross and net NPA, capital adequacy, loan growth versus deposits); cash
+  conversion and related-party checks need cash-flow statements (in results only from FY2020). Without them the
+  framework repeats DHFL, Yes Bank and Satyam.
+- Reject: using the score to pick a concentrated 20-stock portfolio or to hunt multibaggers. Measured blind, it found
+  them no better than chance; the famous winners were mid-ranked or caught late.
+- Outcome as pre-registered: nothing goes to Telegram or paper; real money stays on the rulebook.
