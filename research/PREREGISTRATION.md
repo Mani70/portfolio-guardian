@@ -587,3 +587,68 @@ The back-calculated years are reported beside, labelled as such, and judge nothi
 What changes: nothing live (Addendum 14: a live rule needs 20 years of blind evidence, and these have 7-15). The result
 goes to the owner and steers Addendum 18 (the company-level test): pillars whose index shows no edge are not expected
 to carry much weight there either.
+
+## Addendum 18 (9 Oct 2026, before any company result is downloaded): the owner's investment framework, scored blind
+
+The owner's framework ("Indian Equity Investment Framework - Historical Validation") weights seven pillars: business
+economics and moat 20, growth runway 15, financial strength and cash conversion 15, management and governance 15,
+valuation and margin of safety 20, growth inflection and catalysts 10, downside resilience 5. The weights are the
+owner's, taken as given (hypotheses, never fitted). Each pillar is measured ONLY with numbers a company had filed on NSE
+before the decision date, so the score is computed by code and cannot use hindsight.
+
+Why no hand-written memos: the analyst (Claude) knows how Titan, Satyam, Yes Bank and the rest turned out; a memo
+"as of 2008" would be contaminated. The named companies are reported as checkpoints of the mechanical score instead.
+
+Data (research/fundamentals18.py): NSE's own filing records (www.nseindia.com/api/corporates-financial-results, annual,
+standalone), with the date each was filed; the result itself from NSE's archive pages (FY2005-FY2017) and XBRL files
+(FY2018 on, the full-year context). Prices: the bhavcopy panel of Addendum 12, corporate actions applied. Dividends
+paid: the dividend rows of NSE's corporate-action files (from 2010). A result counts from the session after it was
+filed; FY2005-FY2006 results (no filing date on NSE) count from 1 Jul 2007.
+
+Decision dates: 15 July (or the next session) each year 2008-2025: the March year's audited results are due by the
+end of May. Universe on each date: the 500 most traded EQ stocks (median daily value, 126 sessions; 252 sessions of
+history; ETFs excluded), from the bhavcopy, so failed and delisted companies are in it. A company enters the scoring
+only with an annual result for a year ending within the last 16 months.
+
+Measures (each turned into a percentile among the scored companies that day; a pillar = the mean of its measures'
+percentiles; a missing pillar counts 50; the score = the weighted sum, 0-100):
+1. Business economics (20): return on equity (profit / (paid-up capital + reserves)), mean of the last 3 years
+   (at least 2); its stability (minus the standard deviation of ROE over up to 5 years); non-financials also the
+   operating margin ((profit before tax + interest) / revenue), mean of 3 years.
+2. Growth runway (15): revenue growth a year over up to 3 years (at least 2); profit growth over the same span (a
+   loss at either end ranks last). Market size and share cannot be measured from filings: not scored.
+3. Financial strength (15): non-financials: interest cover ((profit before tax + interest) / interest, capped at 50;
+   no interest = 50). Financials: not measurable (no balance sheet in the results before 2016): pillar left out and
+   the other weights scaled up. Cash conversion: cash-flow statements are in results only from FY2020: not scored.
+4. Management and governance (15): share count growth over 3 years (dilution; lower is better); days from the year's
+   end to the filing of its results (lower is better); a dividend paid in the 12 months before the date (yes ranks
+   above no). Promoter pledges are in the results only for some years: not scored.
+5. Valuation (20): earnings yield (last year's EPS / price) and book-to-price (book value per share / price) at the
+   decision date's close.
+6. Growth inflection (10): last year's revenue growth minus the 3-year rate; last year's profit growth.
+7. Downside resilience (5): loss years among the last 5 (fewer is better); price volatility over the last year
+   (lower is better).
+Financial companies: NSE's bank format, or interest cost at least 35% of revenue (lenders) - their margin is profit /
+revenue and pillar 3 is left out.
+Disqualified (never bought, still scored and reported): a loss in the last year; negative or zero net worth;
+non-financial interest cover below 1.5; latest annual result older than 16 months.
+
+Portfolio rule: on each decision date the 20 highest-scoring qualified companies, equal weights, bought at the next
+session's close and held a year (then the next date's 20); a company that stops trading is sold at its last close;
+delivery costs (backtest Costs, ₹1 lakh a position, 0.05% slippage a side). Prices only, no dividends, on both sides.
+
+Pass bars (A = decisions 2008-2015, B = 2016-2025; the weights are not fitted, so both are out of sample):
+- Portfolio: after costs, CAGR AND Sharpe over cash above the equal-weighted universe (all 500, before costs) in A
+  and in B.
+- Ranking: the yearly rank correlation between the score and the next 12 months' return, averaged over the 18 years,
+  t >= 2, and positive on average in both A and B.
+- Multibaggers: among the top fifth by score, the share that went up 3x or more within 5 years at least 1.5 times
+  the universe's share, in A and in B (B: decisions to 2021).
+Reported without a bar: worst falls; the Nifty 500 total-return index (it includes dividends, the portfolio does not);
+sensitivity (equal pillar weights; each pillar left out; 10 / 30 / 50 stocks; two-year holds); the named companies'
+score and rank on every date they were in the universe (Titan, Asian Paints, Eicher Motors, Infosys, HDFC Bank, Bajaj
+Finance, Satyam, Yes Bank, DHFL, Kingfisher Airlines); the false positives (top-20 picks that lost half their value)
+and missed winners (3x in 5 years from the bottom half).
+
+What changes: a pass goes to the owner (Telegram long-term ideas, a paper portfolio first; Addendum 14 keeps real money
+on the rulebook). A fail is reported as plainly, with which pillars carried signal and which did not.
