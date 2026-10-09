@@ -20,7 +20,7 @@ from typing import Dict, List, Optional
 
 from .base import SwingStrategy
 
-DEFAULT_WEIGHTS = {"NIFTYBEES": 0.45, "JUNIORBEES": 0.15, "MON100": 0.20, "GOLDBEES": 0.10, "LIQUIDCASE": 0.10}
+DEFAULT_WEIGHTS = {"NIFTYBEES": 0.45, "JUNIORBEES": 0.15, "MON100": 0.20, "GOLDBEES": 0.10, "LIQUIDCASE": 0.10}  # Addendum 13; live weights: rulebook.yaml
 
 
 class CoreAllocation(SwingStrategy):

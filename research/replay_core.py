@@ -29,12 +29,15 @@ from trader.journal import Journal                                   # noqa: E40
 from trader.market import ReplayMarket                               # noqa: E402
 from trader.strategies.allocation import CoreAllocation              # noqa: E402
 
-SYM = {"N50": "NIFTYBEES", "NN50": "JUNIORBEES", "MON100": "MON100", "GOLD": "GOLDBEES", "LIQ": "LIQUIDCASE"}
+SYM = {"N50": "NIFTYBEES", "NN50": "JUNIORBEES", "MON100": "MON100", "GOLD": "GOLDBEES", "LIQ": "LIQUIDCASE",
+       "MID": "MID150BEES"}
 
 
 def frames_from(rets: pd.DataFrame) -> dict:
     out = {}
     for k, sym in SYM.items():
+        if k not in rets:
+            continue
         r = rets[k]
         first = r.first_valid_index() if k != "LIQ" else r.index[0]
         lv = (1 + r.loc[first:].fillna(0)).cumprod() * 100
@@ -45,18 +48,23 @@ def frames_from(rets: pd.DataFrame) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--hist", default=str(ROOT / "research" / "data" / "hist"))
-    ap.add_argument("--tilt", action="store_true", help="L1 with the valuation tilt (V1, Addendum 16a)")
+    ap.add_argument("--rulebook", action="store_true",
+                    help="the rulebook's rule L1 as it stands (weights and valuation tilt; Addenda 16a / 19a)")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
     rets = A.load_sleeves(Path(a.hist))
     weights = {SYM[k]: v for k, v in A.L1.items()}
     params = {"weights": weights}
-    if a.tilt:
+    if a.rulebook:
         import allweather16 as W
+        import midcap19 as M
         import yaml
-        rule = W.tilt(rets, W.valuation(Path(a.hist)), "div_yield", 20, False)
-        rb = yaml.safe_load((ROOT / "trader" / "rulebook.yaml").read_text(encoding="utf-8"))
-        params["valuation"] = {**rb["rules"]["L1"]["valuation"], "_dir": a.hist}   # the live rule's own settings
+        rets = M.add_mid(rets, Path(a.hist))
+        rb = yaml.safe_load((ROOT / "trader" / "rulebook.yaml").read_text(encoding="utf-8"))["rules"]["L1"]
+        rule = M.rulebook_fn(rets, W.valuation(Path(a.hist)), rb)
+        params = {"weights": dict(rb["weights"])}
+        if rb.get("valuation"):
+            params["valuation"] = {**rb["valuation"], "_dir": a.hist}   # the live rule's own settings
     else:
         rule = A.fixed_mix(rets, A.L1)
     research = A.simulate(rets, rule, pd.Timestamp("2005-12-01"))["equity"]
@@ -95,7 +103,7 @@ def main(argv=None) -> int:
     print(f"\n  engine: {len(orders)} orders, {len(j.trades())} closed trades (partial sells), "
           f"final value Rs {engine.iloc[-1]:,.0f}")
     print(f"  -> replay {'MATCHES' if ok else 'DOES NOT MATCH'} the research within 1 point a year "
-          f"({'Addendum 16a, V1' if a.tilt else 'Addendum 13, L1'})")
+          f"({'the rulebook rule' if a.rulebook else 'Addendum 13, L1'})")
     return 0 if ok else 1
 
 

@@ -685,3 +685,13 @@ Live rule today: V1 (L1 with the Addendum 16 valuation tilt).
 - M10 replaces V1 only if its Sharpe over cash is higher than V1's in A AND B, its worst fall is no more than 2
   points deeper in either (Addendum 13's L2 bar), and M15 also has a higher Sharpe than V1 in A and B. A pass goes
   to the owner as a rulebook change; the yearly re-test would then evaluate the new mix.
+
+## Addendum 19a (9 Oct 2026): the owner adopts M10
+
+Rule L1 in trader/rulebook.yaml becomes M10: NIFTYBEES 35 / JUNIORBEES 15 / MID150BEES 10 / MON100 20 / GOLDBEES 10 /
+LIQUIDCASE 10, bands and year-end unchanged; the valuation tilt moves the same 15 points (expensive: NIFTYBEES 20,
+LIQUIDCASE 25; cheap: NIFTYBEES 45, LIQUIDCASE 0). The rule keeps its name L1 (the autopilot's state refers to it).
+Fallback F unchanged. The yearly re-test evaluates the rulebook's own weights and tilt (research/midcap19.py
+rulebook_fn), same tests and benchmark. Before going live the engine replay must match M10's research numbers within
+1 point a year in A and B. The switch itself is an ordinary rebalance at the next review (the Nifty 50 holding is 10
+points over its new target, beyond the 5-point band).

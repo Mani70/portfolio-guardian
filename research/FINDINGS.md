@@ -562,3 +562,10 @@ measures starts with a low prior; the defensible claim to test is smaller drawdo
 - The ETF is a faithful vehicle: MID150BEES (NETFMID150 before May 2022) returned 18.97% a year from Feb 2019 against
   the sleeve's 18.98% (index minus 0.25%); every calendar year within 0.4 point.
 - Outcome as pre-registered: a pass goes to the owner as a rulebook change; nothing changes until then.
+
+## Addendum 19a: M10 adopted and replayed (9 Oct 2026)
+
+Engine replay (research/replay_core.py --rulebook: the rulebook's own weights and tilt through the real engine): A
+16.03% / -46.1% (research 16.16% / -46.0%), B 15.82% / -27.6% (research 15.86% / -27.6%): within 1 point a year.
+Yearly re-test on data to Dec 2025, the new rule: test 1 Sharpe 1.11 vs 0.70, worst fall -46.0% vs -59.5% (pass);
+test 2 Sharpe 1.52 vs 1.06 (pass).

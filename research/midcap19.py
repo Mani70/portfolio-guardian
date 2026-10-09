@@ -55,6 +55,30 @@ def tilted(rets: pd.DataFrame, val: pd.DataFrame, base: Dict[str, float]):
     return fn
 
 
+SLEEVE = {"NIFTYBEES": "N50", "JUNIORBEES": "NN50", "MID150BEES": "MID", "MON100": "MON100", "GOLDBEES": "GOLD",
+          "LIQUIDCASE": "LIQ"}
+
+
+def rulebook_fn(rets: pd.DataFrame, val: pd.DataFrame, params: dict):
+    """A rulebook rule (trader/rulebook.yaml) as a research target function: its weights, and its valuation tilt's
+    overrides when it has one (Addendum 19a: what the yearly re-test evaluates)."""
+    base = {SLEEVE[k]: float(v) for k, v in params["weights"].items()}
+    vp = params.get("valuation")
+    if not vp:
+        return AL.fixed_mix(rets, base)
+    rich = {**base, **{SLEEVE[k]: float(v) for k, v in (vp.get("expensive") or {}).items()}}
+    cheap = {**base, **{SLEEVE[k]: float(v) for k, v in (vp.get("cheap") or {}).items()}}
+    cut = float(vp.get("cut", 20))
+    pct = val["div_yield_pct"]
+
+    def fn(d, w):
+        p = pct.loc[:d]
+        q = p.iloc[-1] if len(p) else 50
+        mix = rich if q <= cut else cheap if q >= 100 - cut else base
+        return AL.fixed_mix(rets, mix)(d, w)
+    return fn
+
+
 def tracking(hist: Path, rets: pd.DataFrame) -> None:
     panel = H.load_panel(hist, fields=("open", "high", "low", "close", "prevclose", "value"), symbols=["MID150BEES"])
     H.adjust_prices(panel, H.official_events(hist, H.symbol_changes(hist)), use_detection=False)

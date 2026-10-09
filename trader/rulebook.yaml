@@ -8,8 +8,8 @@ active: L1                  # the rule in force unless the yearly re-test has sw
 core_name: core             # the strategy name in the journal, the same whichever rule is active
 
 rules:
-  L1:                       # Addendum 13 + 16 tilt: 15.8% / -44% (2006-15), 15.3% / -27% (2016-26), with dividends
-    weights: {NIFTYBEES: 0.45, JUNIORBEES: 0.15, MON100: 0.20, GOLDBEES: 0.10, LIQUIDCASE: 0.10}
+  L1:                       # Addenda 13, 16, 19 (M10): 16.2% / -46% (2006-15), 15.9% / -28% (2016-26), with dividends
+    weights: {NIFTYBEES: 0.35, JUNIORBEES: 0.15, MID150BEES: 0.10, MON100: 0.20, GOLDBEES: 0.10, LIQUIDCASE: 0.10}
     band: 0.05
     year_end: true
     min_trade: 2000
@@ -17,8 +17,8 @@ rules:
       measure: div_yield    # percentile among its daily values since 1999, read at the month's review
       cut: 20               # lowest 20% of yields = expensive, highest 20% = cheap
       max_age_days: 10      # older data: no tilt
-      expensive: {NIFTYBEES: 0.30, LIQUIDCASE: 0.25}
-      cheap: {NIFTYBEES: 0.55, LIQUIDCASE: 0.0}
+      expensive: {NIFTYBEES: 0.20, LIQUIDCASE: 0.25}
+      cheap: {NIFTYBEES: 0.45, LIQUIDCASE: 0.0}
   F:                        # Addendum 14 fallback, if the yearly re-test finds L1's edge gone
     weights: {NIFTYBEES: 0.80, LIQUIDCASE: 0.20}
     band: 0.05
