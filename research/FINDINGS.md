@@ -544,3 +544,21 @@ Total return, each index against its parent, the factor index charged 0.30 point
 Outcome as pre-registered: nothing changes live. For Addendum 18: published quality and value screens, run by NSE
 with full company data, did not beat their universe after launch, so a company-level framework built on the same
 measures starts with a low prior; the defensible claim to test is smaller drawdowns as much as higher returns.
+
+## Addendum 19: a Midcap 150 sleeve in the live mix (9 Oct 2026; pre-registered; research/midcap19.py)
+
+| CAGR / worst fall / Sharpe over cash | A: 2006-2015 | B: 2016-2026 |
+|---|---|---|
+| Nifty 50 TRI held | 12.1% / -59.5% / 0.33 | 11.4% / -38.3% / 0.44 |
+| Midcap 150 held (minus 0.25%) | 13.5% / -73.0% / 0.39 | 16.4% / -43.4% / 0.67 |
+| V1 (live) | 15.84% / -44.1% / 0.57 | 15.34% / -27.4% / 0.84 |
+| **M10: Nifty 50 35 / Midcap 150 10 (rest as V1)** | **16.16% / -46.0% / 0.60** | **15.86% / -27.6% / 0.87** |
+| M15: Nifty 50 30 / Midcap 150 15 | 16.39% / -46.9% / 0.61 | 16.11% / -27.7% / 0.89 |
+
+- **M10 PASSES** its bar: Sharpe over cash higher than V1 in A (0.60 vs 0.57) and B (0.87 vs 0.84), worst fall 1.9
+  points deeper in A (bar: 2) and 0.2 in B, and the neighbour M15 also higher in both.
+- How strong: modest and consistent, +0.3 point a year in A and +0.5 in B. The price is a slightly deeper 2008
+  fall (-46% vs -44%): midcaps fell 73% then. M15 earns a little more for a little more fall; the bar was set on M10.
+- The ETF is a faithful vehicle: MID150BEES (NETFMID150 before May 2022) returned 18.97% a year from Feb 2019 against
+  the sleeve's 18.98% (index minus 0.25%); every calendar year within 0.4 point.
+- Outcome as pre-registered: a pass goes to the owner as a rulebook change; nothing changes until then.
