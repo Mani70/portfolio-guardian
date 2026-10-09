@@ -652,3 +652,18 @@ and missed winners (3x in 5 years from the bottom half).
 
 What changes: a pass goes to the owner (Telegram long-term ideas, a paper portfolio first; Addendum 14 keeps real money
 on the rulebook). A fail is reported as plainly, with which pillars carried signal and which did not.
+
+## Addendum 18a (9 Oct 2026, after checking the parser on 4 companies, before any scoring or outcome): data handling
+
+Found while checking the parser (Titan, Yes Bank, Bajaj Finance, Satyam), fixed before anything is scored:
+- Unit slips in companies' own filings (e.g. Bajaj Finance's reserves filed in crore on a lakh form): an amount more
+  than 50 times smaller or larger than the median of the same company's other years is treated as missing. A profit
+  before tax of exactly 0 with a non-zero net profit (a misread bank form) is missing. Reserves of 0 = not given.
+- Share counts change with splits and bonuses, so per-share numbers are not used across years. Valuation instead:
+  market value at the result's filing = shares in the result (paid-up capital / face value) x that day's actual
+  close; moved to the decision date by the adjusted price return. Earnings yield = profit / that value; book-to-price
+  = (paid-up capital + reserves) / that value.
+- Dilution: shares now / shares 3 years earlier, corrected by NSE's official bonus and split factors between the two
+  filings (available from 2010; before that the measure is missing and the pillar uses its other measures).
+- A year's result whose document NSE no longer serves (e.g. Yes Bank FY2018, Bajaj Finance FY2019) is missing; the
+  measures use the years that exist.
