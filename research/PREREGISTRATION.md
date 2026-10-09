@@ -667,3 +667,21 @@ Found while checking the parser (Titan, Yes Bank, Bajaj Finance, Satyam), fixed 
   filings (available from 2010; before that the measure is missing and the pillar uses its other measures).
 - A year's result whose document NSE no longer serves (e.g. Yes Bank FY2018, Bajaj Finance FY2019) is missing; the
   measures use the years that exist.
+
+## Addendum 19 (9 Oct 2026, before any of it runs): a midcap sleeve in the live mix
+
+Owner's question: why mostly large caps? The Addendum 13 candidates never included midcaps; this tests one.
+Live rule today: V1 (L1 with the Addendum 16 valuation tilt).
+
+- M10: Nifty 50 35 / Next 50 15 / Midcap 150 10 / MON100 20 / gold 10 / liquid 10 (equity stays 80%), with the same
+  valuation tilt on the Nifty 50 sleeve (expensive: Nifty 50 20, liquid 25; cheap: Nifty 50 45, liquid 0).
+- Neighbour M15: Midcap 150 15, Nifty 50 30 (tilt: 15 / 45 ... the same 15-point shift; cheap: 40, liquid 0).
+- Midcap sleeve: the Nifty Midcap 150 total-return index minus 0.25% a year (MID150BEES, Nippon India, about
+  ₹17 crore traded a day; its expense ratio rounded up). Its own price history (NETFMID150 from 2020, MID150BEES
+  from 2022) is compared with the sleeve to report the tracking difference. The index's early years are calculated
+  backwards, but by a plain market-cap rule (ranks 101-250), not one picked for its results.
+- research/allocation20.py's simulation, costs, 5-point bands and year-end rebalance; Sharpe over cash
+  (Addendum 16); A = 2006-2015, B = 2016-2026.
+- M10 replaces V1 only if its Sharpe over cash is higher than V1's in A AND B, its worst fall is no more than 2
+  points deeper in either (Addendum 13's L2 bar), and M15 also has a higher Sharpe than V1 in A and B. A pass goes
+  to the owner as a rulebook change; the yearly re-test would then evaluate the new mix.
