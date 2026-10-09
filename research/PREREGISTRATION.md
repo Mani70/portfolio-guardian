@@ -551,3 +551,39 @@ its weights, bands, year-end rebalance and the fallback F (no tilt) are unchange
   benchmark, same Sharpe definition as Addendum 14 (Addendum 16 found the verdicts identical on either definition).
 - Before going live, the engine replay (research/replay_core.py) must match V1's research numbers within 1 point a
   year in A and B, as Addendum 13 required of L1.
+
+## Addendum 17 (9 Oct 2026, before any return is downloaded): do NSE's quality / value / low-volatility indices add anything?
+
+Why: the owner's "investment framework" asks whether Buffett / Graham-style company selection works in India. NSE
+publishes indices that select companies mechanically on such rules (quality: ROE, debt/equity, earnings stability;
+value: earnings yield, book-to-price, dividend yield; low volatility). They are a blind test only AFTER each index's
+launch: the years before it were back-calculated by people who already knew the outcome.
+
+Indices (launch date from each index's NSE factsheet; benchmark = its parent universe, total return, niftyindices.com):
+| index | launched | benchmark |
+|---|---|---|
+| Nifty100 Quality 30 | 19 Mar 2015 | Nifty 100 |
+| Nifty50 Value 20 | 28 Mar 2014 | Nifty 50 |
+| Nifty100 Low Volatility 30 | 8 Jul 2016 | Nifty 100 |
+| Nifty Alpha Low-Volatility 30 | 10 Jul 2017 | Nifty 200 |
+| Nifty Quality Low-Volatility 30 | 10 Jul 2017 | Nifty 200 |
+| Nifty200 Quality 30 | 17 Apr 2018 | Nifty 200 |
+| Nifty Midcap150 Quality 50 | 24 Oct 2019 | Nifty Midcap 150 |
+| Nifty Dividend Opportunities 50 | 22 Mar 2011 | Nifty 500 |
+Reported only (launched 2024, or launch date not found: too little live history): Nifty200 Value 30, Nifty500 Quality
+50, Nifty500 Value 50.
+
+Method (research/factor_indices17.py): daily total-return values; live period = the first month-end after launch to
+the last month-end available. CAGR, worst fall, Sharpe over cash (the liquid sleeve of research/allocation20.py), and
+monthly excess returns over the benchmark: annualised mean and t = mean / sd x sqrt(months). An ETF on a factor index
+costs more than a broad one, so 0.30 point a year is taken off the factor index before the excess is judged.
+
+Verdict per index (live period only):
+- EDGE SHOWN: excess after the 0.30-point cost > 0, t >= 2, and Sharpe over cash above the benchmark's.
+- CONSISTENT, NOT PROVEN: excess > 0 but t < 2.
+- NO EDGE: excess <= 0.
+The back-calculated years are reported beside, labelled as such, and judge nothing.
+
+What changes: nothing live (Addendum 14: a live rule needs 20 years of blind evidence, and these have 7-15). The result
+goes to the owner and steers Addendum 18 (the company-level test): pillars whose index shows no edge are not expected
+to carry much weight there either.
