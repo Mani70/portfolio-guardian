@@ -429,8 +429,10 @@ Setup (once): add three keys to the OCI Vault secret, next to the others -
 `ANTHROPIC_API_KEY` (console.anthropic.com), `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` (elevenlabs.io: pick a
 Hindi-English voice in the Voice Library and copy its voice ID). Optionally put your handle in trader.yaml:
 ```yaml
-reel: {handle: "@yourhandle"}
+reel: {handle: "@yourhandle"}          # optional: voice_model: eleven_multilingual_v2 (best voice, ~2x credits)
 ```
+Voice credits: the default model (eleven_flash_v2_5) uses about 20-22k ElevenLabs credits a month for a daily Reel
+(Starter plan: 30k); eleven_multilingual_v2 sounds a little better and needs about 40-44k (Creator plan).
 Without the keys the job still sends a silent video from a template, and its note says which key is missing.
 
 # Phase 6: Running on an OCI server (Oracle Linux 9)

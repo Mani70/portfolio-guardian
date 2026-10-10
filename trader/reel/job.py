@@ -18,7 +18,8 @@ OUT = ROOT / "cache" / "reel"
 log = logging.getLogger("trader.reel")
 
 
-def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = None, handle: str = "") -> dict:
+def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = None, handle: str = "",
+         voice_model: Optional[str] = None) -> dict:
     facts = {"date": today.isoformat(), "lesson": content.pick(content.LESSONS, today),
              "research": content.pick(content.RESEARCH, today), "news": content.news_item(today, store)}
     sc, source = S.write(facts, client)
@@ -29,7 +30,7 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
     scenes, voices = [], set()
     items = [(s.kind, s.on_screen, s.narration) for s in sc.scenes] + [("disclaimer", "Education only", S.DISCLAIMER)]
     for i, (kind, on_screen, narration) in enumerate(items):
-        audio, vsrc = voice.speak(narration, work / f"a{i:02d}.mp3")
+        audio, vsrc = voice.speak(narration, work / f"a{i:02d}.mp3", model=voice_model)
         voices.add(vsrc)
         scenes.append((kind, on_screen, narration, audio))
     video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}.mp4", work, handle)
@@ -42,13 +43,13 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
 
 
 def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, store=None,
-        handle: str = "") -> str:
+        handle: str = "", voice_model: Optional[str] = None) -> str:
     today = today or date.today()
     state_p = out_dir / "state.json"
     st = json.loads(state_p.read_text()) if state_p.exists() else {}
     if st.get("sent") == today.isoformat():
         return "reel: already sent today"
-    r = make(today, out_dir, client, store, handle)
+    r = make(today, out_dir, client, store, handle, voice_model)
     ok = send_video(r["video"], f"🎬 Today's Reel ({today:%a %d %b}) - review before posting")
     notes = [f"📝 Instagram caption (copy-paste):\n\n{r['caption']}",
              "Before you post: watch it once; check the news source link on nseindia.com if a company is named.\n"

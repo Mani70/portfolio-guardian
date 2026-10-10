@@ -590,7 +590,8 @@ def cmd_reel(cfg, args) -> int:
     from guardian.notifier import Notifier
     from .reel.job import run
     n = Notifier(dry_run=args.dry_run)
-    print(run(n.send, n.send_video, handle=str((cfg.get("reel") or {}).get("handle", ""))))
+    rc = cfg.get("reel") or {}
+    print(run(n.send, n.send_video, handle=str(rc.get("handle", "")), voice_model=rc.get("voice_model")))
     return 0
 
 

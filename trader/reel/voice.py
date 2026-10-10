@@ -15,7 +15,7 @@ import requests
 
 log = logging.getLogger("trader.reel.voice")
 API = "https://api.elevenlabs.io/v1/text-to-speech/{voice}"
-TTS_MODEL = "eleven_multilingual_v2"
+TTS_MODEL = "eleven_flash_v2_5"        # ~half the credits of eleven_multilingual_v2: a daily Reel fits the Starter plan
 WORDS_PER_SECOND = 2.6
 
 
@@ -47,7 +47,8 @@ def silence(path: Path, seconds: float) -> Path:
     return path
 
 
-def speak(text: str, path: Path, key: Optional[str] = None, voice: Optional[str] = None) -> tuple[Path, str]:
+def speak(text: str, path: Path, key: Optional[str] = None, voice: Optional[str] = None,
+          model: Optional[str] = None) -> tuple[Path, str]:
     """(audio file, source): 'elevenlabs', or 'silence (...)' when the voice service is not available."""
     key = key or os.getenv("ELEVENLABS_API_KEY")
     voice = voice or os.getenv("ELEVENLABS_VOICE_ID")
@@ -55,7 +56,7 @@ def speak(text: str, path: Path, key: Optional[str] = None, voice: Optional[str]
         return silence(path, max(2.0, len(text.split()) / WORDS_PER_SECOND)), "silence (no ElevenLabs key)"
     try:
         r = requests.post(API.format(voice=voice), headers={"xi-api-key": key, "accept": "audio/mpeg"},
-                          json={"text": text, "model_id": TTS_MODEL,
+                          json={"text": text, "model_id": model or TTS_MODEL,
                                 "voice_settings": {"stability": 0.45, "similarity_boost": 0.8, "style": 0.35}},
                           timeout=120)
         if r.status_code == 200 and r.content:
