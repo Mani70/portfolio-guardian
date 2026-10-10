@@ -17,7 +17,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
-from . import company, content, market, numbers, render, script as S, voice
+from . import company, content, market, night, numbers, render, script as S, voice
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "cache" / "reel"
@@ -100,6 +100,18 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
         f.update(market_facts(day))
         f["episode"] = episodes.get("market", 0) + 1
         return f
+    if slot == "evening" and day is not None and "stories" in day:       # the night bundle (night.gather)
+        if len(day["stories"]) >= 2:
+            f.update(format="night", night_text=night.sheet(day), companies=[s["company"] for s in day["stories"]
+                                                                             if s["company"]],
+                     night_lines=[s["title"] for s in day["stories"]], next="Kal phir, poore din ka hisaab")
+            f["episode"] = episodes.get("night", 0) + 1
+            return f
+        one = night.single(day)
+        if one:
+            f.update(format="news", **one)
+            f["episode"] = episodes.get("news", 0) + 1
+            return f
     saved = market.load_saved(today, out_dir) if slot == "evening" else None
     results = (saved or {}).get("results") or []
     macro = (saved or {}).get("news") or []
@@ -149,12 +161,13 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
     scenes = [(kind, on_screen, narration, spoken[i][0]) for i, (kind, on_screen, narration, _) in enumerate(items)]
     voices = {v for _, v in spoken}
     top = f"{facts.get('series') or S.SERIES[facts['format']]}  •  EP {facts['episode']}"
-    video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}_{slot}.mp4", work, handle, top,
-                         fast=bool(facts.get("breaking")))
+    video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}_{slot}.mp4", work, handle, top)
     tags = " ".join("#" + h.lstrip("#").replace(" ", "") for h in sc.hashtags[:8])
     caption = f"{top}\n\n{sc.caption}\n\n{S.CAPTION_DISCLAIMER}\n\n{tags}"
     if facts.get("news"):
         caption += f"\n\nSource: NSE announcement, {facts['news']['symbol']} ({facts['news']['date']})"
+    if facts.get("format") == "night":
+        caption += "\n\nSources: " + ", ".join(night.sources(day)[:8])
     if facts.get("format") == "company":
         caption += "\n\nSources: " + ", ".join(sorted({market._domain(u) for u in company.sources(day)})[:6])
     if facts.get("results"):
@@ -187,6 +200,11 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
             notify(f"Company case study skipped this week ({name}): {note}.")
             return f"reel (company): skipped - {note}"
         topic = ""
+    if slot == "evening" and not topic:
+        try:
+            day = night.gather(today, out_dir, client)
+        except Exception as e:                                             # noqa: BLE001 - fall back to the old evening
+            log.warning("night report: %s", e)
     if slot == "market" and not topic:
         day = market.compile_day(today, store or content.ROOT / "cache" / "insights", holidays, client, search=search,
                                  hist_path=out_dir / "index_hist.csv", polls=st.get("polls", []))

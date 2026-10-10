@@ -487,12 +487,20 @@ then the Reel; Claude runs in fast mode for breaking news (falls back to standar
 and the video uses a faster encoder. News older than 2 hours gets no Reel (`max_age_min`); overnight news (23:00-07:00)
 counts as fresh until 09:30.
 
-Breaking Reels use `eleven_flash_v2_5` by default (faster, half the credits); settings:
+Quality first: breaking Reels are full length (45-60 s) in the main voice; Claude reads the official document and
+adds a little sourced background (up to 3 searches of the trusted list) before writing. **Catch-up search**: every 2
+hours, 08:00-22:00, Claude searches the trusted list for important news of the last 3 hours that the watch has not
+covered (it is told what was covered); a "major" find becomes a ZAROORI KHABAR Reel at once, the rest are logged.
+**RAAT KI REPORT** (21:30): the day's results, every breaking and catch-up story, trusted news of the 19:15
+compilation and up to 2 filings that were only alerted (read now from the document), the market close and the next
+session - one 90-120 s Reel with more clarity; one story -> its explainer; none -> a MARKET KI KAHANI story.
 ```yaml
 reel:
-  breaking: {enabled: true, max_per_day: 3, voice_model: eleven_flash_v2_5}   # feeds: {name: rss url} to change sources
+  breaking: {enabled: true, max_per_day: 3, max_age_min: 120, sweep_hours: 2}   # voice_model: defaults to reel's
+                                                                                 # feeds: {name: rss url}
 ```
-**Credits at full volume** (07:40 + 19:15 + 21:30 daily, Sundays, ~2 breaking a day) come to roughly 150-170k
+Claude cost at full volume: roughly $1.5-2.5 a day (catch-up searches ~$1, breaking reads, the night report).
+**Credits at full volume** (07:40 + 19:15 + 21:30 daily, Sundays, ~2 breaking a day) come to roughly 180-200k
 ElevenLabs credits a month with eleven_multilingual_v2 - more than a 100k-credit plan; check the plan's monthly
 credits on elevenlabs.io and either move up a plan or set `voice_model: eleven_flash_v2_5` (about half).
 

@@ -1,4 +1,5 @@
 """BREAKING SAMJHO (trader/reel/breaking.py): official sources only, Claude reads the document, a daily cap."""
+import json
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -111,3 +112,57 @@ def test_story_cards_go_out_before_the_reel_and_stale_news_gets_no_reel(tmp_path
     late = breaking.run(lambda t: None, lambda p, c: True, lambda f: 1 / 0, now=NOW.replace(hour=19), out_dir=tmp_path,
                         get=get, size=SIZE, feeds={}, send_photo=lambda p, c: True)
     assert late.startswith("breaking: nothing made")                          # 3 hours old: alert only
+
+
+def test_catch_up_search_makes_a_reel_for_major_missed_news_and_logs_the_rest(tmp_path, monkeypatch):
+    found = [{"headline": "US suspends PERM filings of 8 tech firms", "facts": "On 8 Oct the US Labor Department ...",
+              "why_it_matters": "Indian IT firms sponsor many US staff", "sector": "IT", "companies": ["Infosys"],
+              "source_urls": ["https://www.dol.gov/newsroom/x"], "official": True, "importance": "major"},
+             {"headline": "Minor update", "facts": "f", "why_it_matters": "w", "sector": "Other", "companies": [],
+              "source_urls": ["https://www.reuters.com/y"], "official": False, "importance": "notable"}]
+    asked = {}
+    monkeypatch.setattr(breaking, "sweep", lambda now, covered, client=None: asked.setdefault("covered", covered) and []
+                        or found)
+    (tmp_path / "breaking.json").write_text(json.dumps({"seen": ["nse:1", "nse:2", "nse:3", "nse:4"], "made": [],
+        "episode": 0, "covered": [{"date": "2026-10-12", "headline": "HCL results", "kind": "results"}]}))
+    made, photos = [], []
+    msg = breaking.run(lambda t: None, lambda p, c: True,
+                       lambda f: made.append(f) or {"video": "v", "caption": "c", "script_source": "claude",
+                                                    "voice": "elevenlabs"},
+                       now=NOW, out_dir=tmp_path, get=get, size=SIZE, feeds={}, send_photo=lambda p, c: photos.append(p))
+    st = json.loads((tmp_path / "breaking.json").read_text())
+    assert asked["covered"] == ["HCL results"]                                # it is told what is already covered
+    assert made[0]["series"] == "ZAROORI KHABAR" and made[0]["macro"]["headline"].startswith("US suspends")
+    assert [c["headline"] for c in st["covered"]][-2:] == [f["headline"] for f in found] and photos
+    again = breaking.run(lambda t: None, lambda p, c: True, made.append, now=NOW.replace(minute=30), out_dir=tmp_path,
+                         get=get, size=SIZE, feeds={})
+    assert again.startswith("breaking: nothing made") and len(made) == 1     # next search only after 2 hours
+
+
+def test_night_report_gathers_the_day_with_sources_and_reads_what_was_only_alerted(tmp_path, monkeypatch):
+    from datetime import date
+    from trader.reel import job, market, night, script as S
+    day = {"date": "2026-10-12", "broad": {"Nifty 50": {"close": 22600.0, "pct": 0.4}}, "sectors": [("Metal", -1.0),
+           ("IT", 2.1)], "fii": -1200.0, "dii": 900.0, "calendar": ["Quarterly results due: Wipro"],
+           "history": ["Nifty 50 moved ... no reliable pattern"], "news": [
+               {"headline": "RBI keeps repo rate at 5.5%", "facts": "f", "why_it_matters": "w", "sector": "Bank",
+                "companies": [], "source_urls": ["https://www.rbi.org.in/x"], "official": True}],
+           "results": [{"company": "HCL Technologies", "quarter": "Jul-Sep 2026", "official": True, "points": [
+               {"text": "Revenue up 5%", "source_urls": ["https://www.nseindia.com/a"]}]}]}
+    market.save(day, tmp_path)
+    (tmp_path / "breaking.json").write_text(json.dumps({"covered": [
+        {"date": "2026-10-12", "kind": "results", "company": "HCL Technologies", "headline": "HCL Tech results",
+         "points": ["Profit up 7%"], "why_it_matters": "w", "url": "https://www.nseindia.com/b", "context": []}],
+        "missed": [{"date": "2026-10-12", "kind": "order won", "company": "L&T", "title": "Order", "url": "https://u",
+                    "source": "NSE", "id": "nse:9", "time": "12-Oct-2026 15:00:00"}]}))
+    monkeypatch.setattr(breaking, "read", lambda c, client=None, fast=True: {
+        "material": True, "headline": "L&T wins a large order", "points": ["Order worth ₹5,000 crore"],
+        "why_it_matters": "w", "url": c["url"], "source": "NSE", "companies": ["L&T"], "sector": "Other", "context": []})
+    b = night.gather(date(2026, 10, 12), tmp_path)
+    titles = [s["title"] for s in b["stories"]]
+    assert titles[0].startswith("HCL Technologies results") and len(titles) == 3          # HCL once, RBI, L&T order
+    assert "L&T wins a large order" in titles and "Nifty 50 closed 22,600 (+0.40%)" in b["close"][0]
+    f = job.facts_for(date(2026, 10, 12), "evening", {}, tmp_path / "none", day=b, out_dir=tmp_path)
+    assert f["format"] == "night" and "STORY 1 (results)" in f["night_text"] and "RAAT KI REPORT" in S._brief(f)
+    one = night.single({**b, "stories": b["stories"][:1]})
+    assert one["results"]["company"] == "HCL Technologies"

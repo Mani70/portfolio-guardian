@@ -48,6 +48,12 @@ class Point(BaseModel):
     text: str = Field(description="One fact exactly as the document states it, with numbers and dates")
 
 
+class Context(BaseModel):
+    text: str = Field(description="Background from an established outlet or official site (e.g. the year-ago quarter, "
+                                  "the sector picture) - no forecast, no share price or move")
+    source_urls: List[str]
+
+
 class Breaking(BaseModel):
     material: bool = Field(description="True only if this could matter to many investors (a big number, a policy "
                                        "change, a leadership exit, a default, a large deal) - routine filings are False")
@@ -59,13 +65,17 @@ class Breaking(BaseModel):
     sector: Literal["IT", "Bank", "Pharma", "Auto", "FMCG", "Metal", "Realty", "Energy", "Oil & Gas", "Whole market",
                     "Other"]
     companies: List[str]
+    context: List[Context] = Field(default_factory=list)
 
 
 READ = """Read this official document and report what it says, for Indian retail investors: {url}
 
 It is: {what}
 
-Use the web_fetch tool on that exact URL. Report only facts stated in the document, with their numbers and dates. Then say plainly whether it is material for many investors (a big number, a policy change, a leadership exit, a default, a large deal) or routine."""
+1. Use the web_fetch tool on that exact URL. Report the facts stated in the document, with their numbers and dates.
+2. Then, if it helps a beginner understand it, use web_search (up to 3 searches) for short background from established outlets or official sites - e.g. the same quarter last year, or what the policy changes - with the URLs.
+3. Say plainly whether it is material for many investors (a big number, a policy change, a leadership exit, a default, a large deal) or routine.
+No forecasts, no share prices or share moves, no stock views."""
 
 STRUCTURE = """Turn these notes on an official document into the fields. Only facts from the notes; no share price, share move, forecast, target or buy/sell view.
 
@@ -154,7 +164,7 @@ INSTANT = {"results", "order won", "acquisition", "rating upgrade", "rating down
 
 def priority(c: dict) -> tuple:
     order = {"results": 0, "macro": 1, "check": 3}
-    return (order.get(c["kind"], 2), -c["value"])
+    return (order.get(c.get("kind"), 2), -(c.get("value") or 0))
 
 
 # ---------------------------------------------------------------- reading the document
@@ -164,19 +174,23 @@ def read(c: dict, client=None, fast: bool = True) -> Optional[dict]:
     if client is None and not os.getenv("ANTHROPIC_API_KEY"):
         return None
     client = client or anthropic.Anthropic()
-    tool = {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 2,
-            "allowed_domains": market.OFFICIAL + ["nseindia.com"]}
+    tools = [{"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 2,
+              "allowed_domains": market.OFFICIAL + ["nseindia.com"]},
+             {"type": "web_search_20260209", "name": "web_search", "max_uses": 3,
+              "allowed_domains": market.OFFICIAL + market.OUTLETS}]
     what = f"{c['source']} - {c['company']}: {c['title']}"
     messages = [{"role": "user", "content": READ.format(url=c["url"], what=what)}]
-    notes, fetched = [], False
+    notes, fetched, retrieved = [], False, set()
     try:
         for _ in range(3):
-            resp = market.create(client, fast, model=market.MODEL, max_tokens=16000, messages=messages, tools=[tool],
-                                 output_config={"effort": "low"}, betas=["server-side-fallback-2026-07-01"],
+            resp = market.create(client, fast, model=market.MODEL, max_tokens=16000, messages=messages, tools=tools,
+                                 output_config={"effort": "medium"}, betas=["server-side-fallback-2026-07-01"],
                                  fallbacks="default")
             for b in resp.content:
                 if b.type == "web_fetch_tool_result" and getattr(b.content, "type", "") == "web_fetch_result":
                     fetched = True
+                elif b.type == "web_search_tool_result" and isinstance(b.content, list):
+                    retrieved |= {r.url for r in b.content if getattr(r, "url", None)}
                 elif b.type == "text":
                     notes.append(b.text)
             if resp.stop_reason != "pause_turn":
@@ -185,7 +199,7 @@ def read(c: dict, client=None, fast: bool = True) -> Optional[dict]:
         if not (fetched and notes):
             return None
         parsed = client.beta.messages.parse(
-            model=market.MODEL, max_tokens=8000, output_format=Breaking, output_config={"effort": "low"},
+            model=market.MODEL, max_tokens=8000, output_format=Breaking, output_config={"effort": "medium"},
             messages=[{"role": "user", "content": STRUCTURE.format(notes="\n".join(notes)[:40000])}],
             betas=["server-side-fallback-2026-07-01"], fallbacks="default")
         b = parsed.parsed_output
@@ -199,8 +213,10 @@ def read(c: dict, client=None, fast: bool = True) -> Optional[dict]:
     pts = [p.text for p in b.points if not share_talk(p.text) and not BANNED.search(p.text)]
     if not market.safe_text(f"{b.headline} {b.why_it_matters}", b.companies) or len(pts) < 2:
         return None
+    ctx = [{"text": x.text, "source_urls": market._sourced(x, retrieved)} for x in b.context]
+    ctx = [x for x in ctx if x["source_urls"] and not share_talk(x["text"]) and market.safe_text(x["text"], b.companies)]
     return {"material": b.material, "headline": b.headline, "points": pts, "why_it_matters": b.why_it_matters,
-            "sector": b.sector, "companies": b.companies, "url": c["url"], "source": c["source"]}
+            "sector": b.sector, "companies": b.companies, "url": c["url"], "source": c["source"], "context": ctx[:3]}
 
 
 def facts(c: dict, got: dict, episode: int) -> dict:
@@ -209,16 +225,87 @@ def facts(c: dict, got: dict, episode: int) -> dict:
     f = {"date": date.today().isoformat(), "format": "news", "series": "BREAKING SAMJHO", "breaking": True,
          "episode": episode, "companies": got["companies"] + ([c["company"]] if c["symbol"] else [])}
     src = [got["url"]]
+    ctx = [{"text": x["text"], "source_urls": x["source_urls"]} for x in got.get("context", [])]
     if c["kind"] == "results":
         f["results"] = {"company": c["company"], "quarter": "the latest quarter", "official": True,
-                        "points": [{"text": p, "source_urls": src} for p in got["points"]]}
+                        "points": [{"text": p, "source_urls": src} for p in got["points"]] + ctx}
     else:
-        f["macro"] = {"headline": got["headline"], "facts": " ".join(got["points"]), "official": True,
+        f["macro"] = {"headline": got["headline"],
+                      "facts": " ".join(got["points"] + [f"Background: {x['text']}" for x in ctx]), "official": True,
                       "why_it_matters": got["why_it_matters"], "sector": got["sector"], "companies": got["companies"],
                       "source_urls": src}
         hist = _reaction(c["kind"]) if c["kind"] not in ("macro", "check") else None
         f["history"] = [hist] if hist else []
     return f
+
+
+# ---------------------------------------------------------------- the catch-up search
+class SweepItem(market.NewsItem):
+    importance: Literal["major", "notable", "minor"] = Field(description="For Indian investors as a whole")
+
+
+class SweepList(BaseModel):
+    items: List[SweepItem]
+
+
+SWEEP = """It is {now} in India. Find the most important NEWS of the last 3 hours that can move the Indian stock market: government or regulator decisions (India or abroad), central banks, US policy that concerns Indian sectors (visas, tariffs, trade), crude oil, and big events at large Indian listed companies.
+
+Already covered today - do NOT repeat these: {covered}
+
+For each NEW event: the facts with their dates and the URLs of the pages you used, and how important it is for Indian investors as a whole (major / notable / minor). Use only the search results; no rumours, opinions, forecasts, share prices or stock calls."""
+
+SWEEP_STRUCTURE = """Turn these notes into news items. Only events of the last 3 hours before {now} that are NOT in this covered list: {covered}. Use only facts and URLs from the notes; no forecasts, share prices or stock calls.
+
+NOTES:
+{notes}"""
+
+
+def sweep(now: datetime, covered: List[str], client=None) -> List[dict]:
+    """Trusted, important news of the last 3 hours that the watch has not covered (rule of Addendum 23 in code)."""
+    import anthropic
+    if client is None and not os.getenv("ANTHROPIC_API_KEY"):
+        return []
+    client = client or anthropic.Anthropic()
+    listed = "; ".join(covered[-30:]) or "(nothing yet)"
+    tool = {"type": "web_search_20260209", "name": "web_search", "max_uses": 6,
+            "allowed_domains": market.OFFICIAL + market.OUTLETS, "user_location": {"type": "approximate", "country": "IN"}}
+    messages = [{"role": "user", "content": SWEEP.format(now=f"{now:%A %d %B %Y, %H:%M}", covered=listed)}]
+    retrieved, notes = set(), []
+    try:
+        for _ in range(3):
+            resp = market.create(client, False, model=market.MODEL, max_tokens=16000, messages=messages, tools=[tool],
+                                 output_config={"effort": "medium"}, betas=["server-side-fallback-2026-07-01"],
+                                 fallbacks="default")
+            for b in resp.content:
+                if b.type == "web_search_tool_result" and isinstance(b.content, list):
+                    retrieved |= {r.url for r in b.content if getattr(r, "url", None)}
+                elif b.type == "text":
+                    notes.append(b.text)
+            if resp.stop_reason != "pause_turn":
+                break
+            messages = messages[:1] + [{"role": "assistant", "content": resp.content}]
+        if not notes or not retrieved:
+            return []
+        parsed = client.beta.messages.parse(
+            model=market.MODEL, max_tokens=16000, output_format=SweepList, output_config={"effort": "medium"},
+            messages=[{"role": "user", "content": SWEEP_STRUCTURE.format(now=f"{now:%d %b %Y %H:%M}", covered=listed,
+                                                                         notes="\n".join(notes)[:60000])}],
+            betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+        items = parsed.parsed_output.items if parsed.parsed_output else []
+    except anthropic.APIError as e:
+        log.warning("catch-up search failed: %s", e)
+        return []
+    kept = []
+    for i in items:
+        t = market.trusted([i], retrieved)
+        if t:
+            kept.append({**t[0], "importance": i.importance})
+    return [k for k in kept if market.safe_text(f"{k['headline']} {k['facts']} {k['why_it_matters']}", k["companies"])]
+
+
+def sweep_facts(it: dict, episode: int, today: str) -> dict:
+    return {"date": today, "format": "news", "series": "ZAROORI KHABAR", "breaking": True, "episode": episode,
+            "companies": it["companies"], "macro": {**it}, "history": []}
 
 
 # ---------------------------------------------------------------- the watch
@@ -233,6 +320,7 @@ def watch(state: dict, now: datetime, get, size: dict, feeds: dict, max_per_day:
     made = [t for t in state.get("made", []) if t.startswith(today)]
     cands = nse_new(get, seen, now.date(), size) + (feed_new(feeds, seen, fetch) if feeds else [])
     alerts, chosen, reads = [], None, 0
+    covered, missed = list(state.get("covered", [])), list(state.get("missed", []))
     for c in sorted(cands, key=priority):
         seen.add(c["id"])
         if learn_only:
@@ -245,6 +333,9 @@ def watch(state: dict, now: datetime, get, size: dict, feeds: dict, max_per_day:
                 on_pick(c)
             got = read(c, client)
             if got and got["material"]:
+                covered.append({"date": today, "kind": c["kind"], "company": c["company"], "time": c.get("time"),
+                                **{k: got.get(k) for k in ("headline", "points", "why_it_matters", "sector", "url",
+                                                           "source")}, "context": got.get("context") or []})
                 if on_read:
                     on_read(c, got)
                 chosen = facts(c, got, state.get("episode", 0) + 1)
@@ -256,13 +347,18 @@ def watch(state: dict, now: datetime, get, size: dict, feeds: dict, max_per_day:
                 continue                                                   # unread routine filing: stay quiet
         if c["kind"] != "check":
             alerts.append(f"📰 {c['source']} - {c['company']}: {c['title'][:160]}\n{c['url']}")
-    new = {"seen": sorted(seen)[-3000:], "made": made, "episode": state.get("episode", 0) + (1 if chosen else 0)}
+            missed.append({"date": today, **{k: c.get(k) for k in ("id", "kind", "company", "title", "url", "source",
+                                                                     "time", "symbol", "value")}})
+    keep = {today, (now.date() - timedelta(days=1)).isoformat()}
+    new = {"seen": sorted(seen)[-3000:], "made": made, "episode": state.get("episode", 0) + (1 if chosen else 0),
+           "covered": [x for x in covered if x["date"] in keep][-60:],
+           "missed": [x for x in missed if x["date"] in keep][-60:], "swept": state.get("swept", "")}
     return chosen, alerts, new
 
 
 def run(notify, send_video, make, now: Optional[datetime] = None, out_dir: Optional[Path] = None, client=None,
         get=None, size: Optional[dict] = None, feeds: Optional[dict] = None, max_per_day: int = 3,
-        fetch=None, send_photo=None, max_age_min: int = 120) -> str:
+        fetch=None, send_photo=None, max_age_min: int = 120, sweep_hours: int = 2, gap_min: int = 30) -> str:
     now = now or datetime.now()
     started = datetime.now()
     out_dir = out_dir or market.ROOT / "cache" / "reel"
@@ -293,8 +389,34 @@ def run(notify, send_video, make, now: Optional[datetime] = None, out_dir: Optio
     def on_read(c, got):
         card(c, got["headline"], got["points"][:3], "KYA HUA")
 
-    chosen, alerts, state = watch(state, now, get, size, feeds, max_per_day, client=client, fetch=fetch,
+    chosen, alerts, state = watch(state, now, get, size, feeds, max_per_day, gap_min, client=client, fetch=fetch,
                                   learn_only=first_run, on_pick=on_pick, on_read=on_read, max_age_min=max_age_min)
+    last = datetime.fromisoformat(state["swept"]) if state.get("swept") else None
+    if (chosen is None and not first_run and sweep_hours and 8 <= now.hour < 22
+            and (last is None or now - last >= timedelta(hours=sweep_hours))):
+        state["swept"] = now.isoformat(timespec="minutes")
+        today = now.date().isoformat()
+        done = [x["headline"] for x in state.get("covered", []) if x["date"] == today]
+        found = sweep(now, done, client)
+        made = [t for t in state.get("made", []) if t.startswith(today)]
+        room = len(made) < max_per_day and (not made or now - datetime.fromisoformat(made[-1]) >=
+                                            timedelta(minutes=gap_min))
+        for it in found:
+            state.setdefault("covered", []).append(
+                {"date": today, "kind": "sweep", "company": ", ".join(it["companies"]), "time": now.strftime("%H:%M"),
+                 "headline": it["headline"], "points": [it["facts"]], "why_it_matters": it["why_it_matters"],
+                 "sector": it["sector"], "url": it["source_urls"][0], "source": market._domain(it["source_urls"][0]),
+                 "context": [], "importance": it["importance"]})
+            if chosen is None and room and it["importance"] == "major":
+                chosen = sweep_facts(it, state.get("episode", 0) + 1, today)
+                chosen["published"] = "in the last 3 hours"
+                state["episode"] = state.get("episode", 0) + 1
+                state.setdefault("made", []).append(now.isoformat(timespec="minutes"))
+                card({"source": market._domain(it["source_urls"][0]), "url": it["source_urls"][0]},
+                     it["headline"], [it["why_it_matters"]], "ZAROORI")
+            else:
+                alerts.append(f"🗞️ Found on the catch-up search ({it['importance']}): {it['headline']}\n"
+                              f"{it['source_urls'][0]}")
     out_dir.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(state))
     if first_run:                                                          # the first run only learns what is old

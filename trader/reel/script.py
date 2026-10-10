@@ -24,7 +24,7 @@ DISCLAIMER_SCREEN = "Education only. Not investment advice. Not a SEBI-registere
 CAPTION_DISCLAIMER = ("Education only - not investment advice. Not a SEBI-registered investment adviser or research "
                       "analyst. Past results do not guarantee future returns.")
 SERIES = {"myth": "MYTH vs SACH", "news": "NEWS SAMJHO", "story": "MARKET KI KAHANI", "market": "MARKET AAJ",
-          "company": "COMPANY KI KUNDLI"}
+          "company": "COMPANY KI KUNDLI", "night": "RAAT KI REPORT"}
 
 SYSTEM = """You write one 45-60 second Instagram Reel in Hinglish - Hindi-first, with the English words young Indians use (share, fund, profit, Nifty), written in Roman letters - for people with NO investment background, mostly from Hindi-speaking India.
 
@@ -203,6 +203,15 @@ COMPANY_RULES = """This is COMPANY KI KUNDLI: a 60-75 second story of one well-k
 - The last beat (kind "question") asks viewers which of its products or services they use - comment mein batao - and teases next week's company if given."""
 
 
+NIGHT_RULES = """This is RAAT KI REPORT, the night Reel: ALL of today's important news together, explained with more clarity than the quick breaking Reels (90-120 seconds, 14-18 beats, 200-290 words).
+- Hook: the day's single biggest story in at most 10 words.
+- Then each story in 2-3 beats: what happened (with its numbers), what it means for a beginner, and history only if given. Biggest story first.
+- One beat for the market close if given; one beat "kal kya dekhna hai" from NEXT SESSION if given.
+- Explain every term (revenue, profit, repo rate, FII...) the first time.
+- A company may be named with its news and its business numbers - NEVER with its share price or share move; no forecast; no buy/sell.
+- The last beat (kind "question") asks which story mattered most to the viewer - comment mein batao."""
+
+
 def _brief(facts: dict) -> str:
     f = facts["format"]
     parts = [f"Today's date: {facts['date']}. Series: {SERIES[f]}, episode {facts.get('episode', 1)}."]
@@ -236,6 +245,9 @@ def _brief(facts: dict) -> str:
         if n.get("history"):
             parts.append(f"HISTORY for this type of news (may be quoted as an average, not a prediction): {n['history']}")
         parts.append("Beat kinds to use: hook, news, explain, history, takeaway, question.")
+    elif f == "night":
+        parts += [NIGHT_RULES, "TODAY'S STORIES AND FACTS (use only these):", facts["night_text"],
+                  "Beat kinds to use: hook, news, explain, history, market, watch, takeaway, question."]
     elif f == "company":
         parts += [COMPANY_RULES, "FACTS (use only these; every number as given):", facts["company_text"],
                   "Beat kinds to use: hook, story, explain, sector, history, takeaway, question."]
@@ -248,10 +260,11 @@ def _brief(facts: dict) -> str:
                   "Tell it like a thriller: the rise, the secret, the fall, the lesson. Use only these facts.",
                   "Beat kinds to use: hook, story, twist, takeaway, question."]
     if facts.get("breaking"):
-        parts.append("BREAKING SAMJHO: this is published minutes after the official source. 35-50 seconds: 7-9 beats, "
-                     "90-130 words. Beat 1 says the news in at most 10 words ('Abhi abhi...'). Beat 2 names the "
-                     "official source. Explain what it means simply; quote history only if given. End with a short "
-                     "comment question. Never a share price, share move, forecast or buy/sell.")
+        parts.append("BREAKING: this goes out soon after the official source - quality first: 45-60 seconds, 9-12 "
+                     "beats, 120-160 words. Beat 1 says the news in at most 10 words ('Abhi abhi...'). Beat 2 names "
+                     "the source. Explain clearly what it means for a beginner, use the background if given, quote "
+                     "history only if given. End with a comment question. Never a share price, share move, forecast "
+                     "or buy/sell.")
     if facts.get("next"):
         parts.append(f"TOMORROW'S TOPIC (tease it in the last beat): {facts['next']}")
     return "\n".join(parts)
@@ -261,7 +274,7 @@ def write(facts: dict, client=None) -> tuple[ReelScript, str]:
     """(script, source): source is 'claude' or 'template' (no key, refusal, error or failed checks)."""
     companies = (([facts["news"]["symbol"]] if facts.get("news") else []) + list(facts.get("companies", []))
                  + list((facts.get("macro") or {}).get("companies", [])))
-    strict = facts.get("format") == "market" or bool(facts.get("macro")) or bool(facts.get("results"))
+    strict = facts.get("format") in ("market", "night") or bool(facts.get("macro")) or bool(facts.get("results"))
     company_mode = facts.get("format") == "company"
     if not os.getenv("ANTHROPIC_API_KEY") and client is None:
         return template(facts), "template (no ANTHROPIC_API_KEY)"
@@ -296,6 +309,9 @@ def write(facts: dict, client=None) -> tuple[ReelScript, str]:
                 issues.append(f"caption: '{BANNED.search(script.caption).group(0)}'")
         if facts.get("format") in ("market", "company"):                               # the wrap is a little longer
             issues = [i for i in issues if not i.startswith("narration is") or not 120 <= _words(script) <= 230]
+        if facts.get("format") == "night":                                # the night Reel is longer
+            issues = [i for i in issues if not (i.startswith("narration is") and 160 <= _words(script) <= 330)
+                      and not (i.endswith("beats (needs 8-12)") and len(script.scenes) <= 20)]
         if facts.get("breaking"):                                         # the breaking Reel is shorter
             issues = [i for i in issues if not i.startswith("narration is") or not 70 <= _words(script) <= 190]
         if not issues:
@@ -331,6 +347,9 @@ def template(facts: dict) -> ReelScript:
                        on_screen=f"{n['symbol']}: news")]
         if n.get("history"):
             beats.append(Scene(kind="history", narration=n["history"], on_screen="Itihaas kya kehta hai"))
+    elif f == "night":
+        beats = [Scene(kind="news", narration=f"Aaj ki badi khabar: {t}.", on_screen=t[:40])
+                 for t in facts["night_lines"][:6]]
     elif f == "company":
         beats = [Scene(kind="story", narration=line[:200], on_screen=line[:40]) for line in facts["company_lines"][:6]]
     elif f == "market":
