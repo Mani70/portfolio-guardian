@@ -216,6 +216,22 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
             else (facts.get("story") or ("",))[0], "checklist": engage.checklist(series, sc.scenes[-1].narration, cover)}
 
 
+def cleanup(out_dir: Path, today: date, video_days: int = 14, image_days: int = 7) -> int:
+    """Old Reel videos (14 days) and cards / slides / covers (7 days) are deleted, so the disk never fills up."""
+    import time
+    n, now = 0, time.time()
+    for pattern, days in (("reel_*.mp4", video_days), ("story_*.png", image_days), ("slide_*.png", image_days),
+                          ("poll_*.png", image_days)):
+        for f in out_dir.glob(pattern):
+            try:
+                if now - f.stat().st_mtime > days * 86400:
+                    f.unlink()
+                    n += 1
+            except OSError:
+                pass
+    return n
+
+
 def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, store=None,
         handle: str = "", voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
         force: bool = False, slot: str = "morning", topic: str = "", holidays=(), search: bool = True,
@@ -288,4 +304,5 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
     state_p.write_text(json.dumps(st))
     for old in sorted(out_dir.glob("work_*"))[:-6]:                         # keep the last few days' working files
         shutil.rmtree(old, ignore_errors=True)
+    cleanup(out_dir, today)
     return f"reel ({slot}): sent {r['format']} ({r['script_source']}; voice {r['voice']})"

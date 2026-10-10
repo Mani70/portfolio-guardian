@@ -46,7 +46,9 @@ if ! flock -n 9; then
 fi
 
 echo "===== $(stamp) start $job" >> "$log"
-timeout --kill-after=60 "$limit" "$PY" "${cmd[@]}" >> "$log" 2>&1
+prio=()
+case "$job" in reel*) prio=(nice -n 15) ;; esac                # Reels render at low priority: trading jobs come first
+timeout --kill-after=60 "$limit" "${prio[@]}" "$PY" "${cmd[@]}" >> "$log" 2>&1
 rc=$?
 echo "===== $(stamp) end $job rc=$rc" >> "$log"
 
