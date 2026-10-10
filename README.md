@@ -429,10 +429,22 @@ Setup (once): add three keys to the OCI Vault secret, next to the others -
 `ANTHROPIC_API_KEY` (console.anthropic.com), `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` (elevenlabs.io: pick a
 Hindi-English voice in the Voice Library and copy its voice ID). Optionally put your handle in trader.yaml:
 ```yaml
-reel: {handle: "@yourhandle"}          # optional: voice_model: eleven_multilingual_v2 (best voice, ~2x credits)
+reel:
+  handle: "@yourhandle"                # shown at the bottom of every frame; "" for none
+  voice_id: <ID>                       # optional: overrides ELEVENLABS_VOICE_ID from the vault
+  voice_model: eleven_multilingual_v2  # default eleven_flash_v2_5; eleven_v3 is the most expressive
+  speak: devanagari                    # the voice reads Hindi words in Devanagari (captions stay Roman); default roman
 ```
+**Choosing the voice:** `trader.run voices` sends Telegram clips of the same Hinglish lines read by your own voices and
+the most used Hindi voices of the Voice Library (about 3k credits); `trader.run voices --voice <ID>` reads them 4 ways
+for one voice - eleven_multilingual_v2 / eleven_v3, Hindi in Roman letters / in Devanagari - each clip's caption has the
+trader.yaml lines (about 1.1k credits). In `speak: devanagari` Claude writes each scene twice: the Roman narration that
+is checked and shown, and the same words with Hindi in Devanagari for the voice; a voice line that adds a call, a
+prediction or a promise, or has different numbers, is dropped and that scene is voiced from the Roman narration.
+
 Voice credits: the default model (eleven_flash_v2_5) uses about 20-22k ElevenLabs credits a month for a daily Reel
-(Starter plan: 30k); eleven_multilingual_v2 sounds a little better and needs about 40-44k (Creator plan).
+(Starter plan: 30k); eleven_multilingual_v2 sounds better and needs about 40-44k (Creator plan); check eleven_v3's
+rate on your ElevenLabs usage page after the first Reel.
 Without the keys the job still sends a silent video from a template, and its note says which key is missing.
 
 # Phase 6: Running on an OCI server (Oracle Linux 9)

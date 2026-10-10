@@ -15,6 +15,7 @@
   python -m trader.run insights       # evening: swing ideas with reasons on Telegram (information only, never traded)
   python -m trader.run fo-paper       # evening: F&O practice run on paper (Addenda 20/20a; never an order)
   python -m trader.run reel           # morning: the daily education Reel -> Telegram for you to review and post
+  python -m trader.run voices         # voice samples on Telegram to choose the Reel's voice (--voice ID: 4 ways)
   python -m trader.run report         # P&L per strategy vs the Nifty ETF, charges, tax estimate -> Telegram
   python -m trader.run reconcile      # live positions vs real INDstocks holdings (--fix to correct the record)
   python -m trader.run keep --stock X --qty N   # keep N shares out of the bot's pending sell of X (after 16:00)
@@ -591,7 +592,17 @@ def cmd_reel(cfg, args) -> int:
     from .reel.job import run
     n = Notifier(dry_run=args.dry_run)
     rc = cfg.get("reel") or {}
-    print(run(n.send, n.send_video, handle=str(rc.get("handle", "")), voice_model=rc.get("voice_model")))
+    print(run(n.send, n.send_video, handle=str(rc.get("handle", "")), voice_model=rc.get("voice_model"),
+              voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman"))))
+    return 0
+
+
+def cmd_voices(cfg, args) -> int:
+    """Voice samples on Telegram, to choose the Reel's voice (trader/reel/audition.py)."""
+    from guardian.notifier import Notifier
+    from .reel.audition import run
+    n = Notifier(dry_run=args.dry_run)
+    print(run(n.send, n.send_audio, voice_id=args.voice or None, model=args.model or None))
     return 0
 
 
@@ -828,7 +839,7 @@ def cmd_reconcile(cfg, args) -> int:
         j.close()
 
 
-COMMANDS = {"check": cmd_check, "adopt": cmd_adopt, "transfer": cmd_transfer, "retest": cmd_retest, "insights": cmd_insights, "fo-paper": cmd_fo_paper, "reel": cmd_reel, "report": cmd_report, "reconcile": cmd_reconcile, "universe": cmd_universe, "holidays": cmd_holidays, "indices": cmd_indices, "split": cmd_split, "keep": cmd_keep, "watch": cmd_watch, "test-order": cmd_test_order, "preview": cmd_preview, "status": cmd_status, "cancel": cmd_cancel, "flatten": cmd_flatten,
+COMMANDS = {"check": cmd_check, "adopt": cmd_adopt, "transfer": cmd_transfer, "retest": cmd_retest, "insights": cmd_insights, "fo-paper": cmd_fo_paper, "reel": cmd_reel, "voices": cmd_voices, "report": cmd_report, "reconcile": cmd_reconcile, "universe": cmd_universe, "holidays": cmd_holidays, "indices": cmd_indices, "split": cmd_split, "keep": cmd_keep, "watch": cmd_watch, "test-order": cmd_test_order, "preview": cmd_preview, "status": cmd_status, "cancel": cmd_cancel, "flatten": cmd_flatten,
             "swing-plan": cmd_swing_plan, "swing-check": cmd_swing_check, "intraday": cmd_intraday}
 
 
@@ -862,6 +873,8 @@ def main(argv=None) -> int:
     ap.add_argument("--no-update", action="store_true", help="retest: use the data already downloaded")
     ap.add_argument("--forget", action="store_true",
                     help="cancel: mark earlier-day orders INDstocks no longer knows as cancelled (check the app first)")
+    ap.add_argument("--voice", default="", help="voices: compare models and spellings for this voice ID")
+    ap.add_argument("--model", default="", help="voices: ElevenLabs model for the first test")
     ap.add_argument("--stock", default="", help="split / keep: the stock")
     ap.add_argument("--qty", type=int, default=0, help="keep: shares to keep out of the bot's sell")
     ap.add_argument("--ratio", type=float, default=0.0, help="split: new shares per old share (2 = 1:1 bonus)")

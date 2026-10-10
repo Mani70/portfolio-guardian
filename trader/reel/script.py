@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import unicodedata
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -18,6 +19,8 @@ log = logging.getLogger("trader.reel.script")
 MODEL = "claude-opus-5-5"
 DISCLAIMER = ("Yeh sirf education hai, investment advice nahi. Main SEBI-registered advisor nahi hoon. Koi bhi "
               "decision lene se pehle khud research karein.")
+DISCLAIMER_SPOKEN = ("यह सिर्फ़ education है, investment advice नहीं। मैं SEBI-registered advisor नहीं हूँ। कोई भी "
+                     "decision लेने से पहले ख़ुद research करें।")
 CAPTION_DISCLAIMER = ("Education only - not investment advice. Not a SEBI-registered investment adviser or research "
                       "analyst. Past results do not guarantee future returns.")
 
@@ -31,12 +34,16 @@ The Reel is EDUCATION ONLY. Indian law (SEBI) does not allow unregistered people
 - present research results as a recommendation.
 You may explain what a piece of official news means, what a concept means, and what our own historical tests found (always as "humare test mein..." - a past result, not a promise).
 
+Each scene also has "spoken": the SAME narration, word for word in meaning, written for the voice: Hindi words in Devanagari, English words (fund, Nifty, P/E ratio, buyback, percent) kept in English letters, every number exactly as in the narration (as digits). Nothing added or left out. Example - narration: "Index fund matlab ek saath 50 companies ka chhota hissa." spoken: "Index fund मतलब एक साथ 50 companies का छोटा हिस्सा।"
+
 Style: a strong hook in the first line (a surprising fact or question), short sentences, warm and energetic, simple words, explain every technical term in the same sentence, no jargon left unexplained. 160-220 words of narration in total. Each scene's on-screen text is at most 7 words. Do not add a disclaimer or a call to follow; those are added after your scenes."""
 
 
 class Scene(BaseModel):
     kind: Literal["hook", "lesson", "research", "news", "takeaway"]
-    narration: str = Field(description="What the voice says, Hinglish in Roman letters")
+    narration: str = Field(description="What the voice says, Hinglish in Roman letters (shown as captions)")
+    spoken: str = Field(default="", description="The same narration for the voice: Hindi words in Devanagari, English "
+                                                "words in English letters, the same numbers as digits")
     on_screen: str = Field(description="Big text on screen, at most 7 words")
 
 
@@ -54,7 +61,21 @@ COMMAND = re.compile(r"\b(kharidiye|kharid lo|kharido|bechiye|bech do|becho|buy 
 ACTION = re.compile(r"\b(buy|sell|kharid\w*|bech\w*|target|entry|exit|accumulate|hold karo)\b", re.I)
 PREDICT = re.compile(r"\b(badhega|girega|upar jayega|neeche jayega|will (?:rise|fall|go up|go down)|rally karega|"
                      r"crash hoga)\b", re.I)
-PRICE = re.compile(r"(₹|rs\.?\s?)\s?\d", re.I)
+PRICE = re.compile(r"(₹|rs\.?\s?|रु\.?\s?|रुपये\s)\s?\d", re.I)
+
+
+def _plain(x: str) -> str:
+    """Devanagari without the nukta dot, so ख़रीद and खरीद (however typed) read the same."""
+    return unicodedata.normalize("NFD", x).replace("\u093c", "")
+
+
+# the same rules for Hindi words written in Devanagari (the voice text)
+HI_PROMISE = re.compile(_plain(r"गारंटी|पक्का (?:प्रॉफिट|मुनाफा|रिटर्न)|पैसा डबल|डबल हो जाएगा|जैकपॉट"))
+HI_COMMAND = re.compile(_plain(r"खरीद(?:ो|िए|ें|\s?लो)|बेच(?:ो|िए|ें|\s?दो)|"
+                               r"(?:buy|sell|invest) (?:करो|करें|कीजिए|कर लो|कर दो)"), re.I)
+HI_ACTION = re.compile(_plain(r"खरीद|बेच|टारगेट|होल्ड"))
+HI_PREDICT = re.compile(_plain(r"बढेगा|बढेगी|गिरेगा|गिरेगी|ऊपर जाएगा|नीचे जाएगा|रैली करेगा|क्रैश होगा"))
+NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 
 
 def check(script: ReelScript, companies: List[str]) -> List[str]:
@@ -79,6 +100,42 @@ def check(script: ReelScript, companies: List[str]) -> List[str]:
         if rx.search(script.caption):
             issues.append(f"caption: '{rx.search(script.caption).group(0)}'")
     return issues
+
+
+def vet_spoken(script: ReelScript, companies: List[str]) -> List[str]:
+    """Keep a scene's Devanagari voice text only if it says what its checked narration says (same rules, same numbers,
+    about the same length); otherwise that scene is voiced from the narration. Returns what was dropped and why."""
+    names, dropped = [c.lower() for c in companies if c], []
+    for i, s in enumerate(script.scenes, 1):
+        if not s.spoken:
+            continue
+        named = any(n in f"{s.narration} {s.on_screen} {s.spoken}".lower() for n in names)
+        bad = _spoken_issues(s, named)
+        if bad:
+            dropped.append(f"scene {i}: " + "; ".join(bad))
+            s.spoken = ""
+    return dropped
+
+
+def _spoken_issues(s: Scene, named: bool) -> List[str]:
+    out, sp = [], _plain(s.spoken)
+    for rx, what in ((PROMISE, "promise"), (COMMAND, "instruction to trade"), (PREDICT, "prediction"),
+                     (HI_PROMISE, "promise"), (HI_COMMAND, "instruction to trade"), (HI_PREDICT, "prediction")):
+        m = rx.search(sp)
+        if m:
+            out.append(f"{what} '{m.group(0)}'")
+    if named:
+        m = ACTION.search(sp) or HI_ACTION.search(sp)
+        if m:
+            out.append(f"'{m.group(0)}' next to a named company")
+        if PRICE.search(sp):
+            out.append("a price next to a named company")
+    if sorted(NUMBER.findall(sp)) != sorted(NUMBER.findall(s.narration)):
+        out.append("numbers differ from the narration")
+    a, b = len(s.narration.split()), len(sp.split())
+    if not 0.6 * a <= b <= 1.5 * a + 3:
+        out.append(f"{b} words against {a} in the narration")
+    return out
 
 
 def _brief(facts: dict) -> str:
@@ -120,6 +177,8 @@ def write(facts: dict, client=None) -> tuple[ReelScript, str]:
         script = resp.parsed_output
         issues = check(script, companies)
         if not issues:
+            for d in vet_spoken(script, companies):
+                log.warning("voice text not used, %s", d)
             return script, "claude"
         log.warning("script failed checks: %s", "; ".join(issues))
         messages += [{"role": "assistant", "content": json.dumps(script.model_dump(), ensure_ascii=False)},
