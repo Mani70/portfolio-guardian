@@ -428,6 +428,15 @@ first comment; you watch it and post it yourself. Each Reel is ONE topic, in one
 | COMPANY KI KUNDLI | Sundays 10:40 | one well-known company (26 in rotation, `--topic company:SYMBOL` for a chosen one): what it does, how it earns, its size, turning points and the risks it reports - every fact from a trusted page the search retrieved; never its share price, market value, valuation, a target or a buy/sell view (`trader/reel/company.py`) |
 | BREAKING SAMJHO | NSE every minute, 24 hours; official feeds every 5 minutes | official, market-moving news within minutes: NSE announcements of well-known companies (results, orders, deals, rating changes, exits, defaults, buybacks, splits; their statements and clarifications after a quick Claude check) and RBI / SEBI / PIB / US Federal Reserve press releases with market words. Claude reads the official document itself (web fetch) and writes only what it says. Max 3 a day, 30 minutes apart; the rest come as one-line alerts (`trader/reel/breaking.py`) |
 
+**Sites that block Anthropic's crawler** (Reuters, ET, Mint, Moneycontrol, The Hindu, ...) cannot be searched by
+Claude's web search - the API refuses any request listing them. The bot learns them from the API's error
+(cache/reel/blocked_domains.json), drops them and retries, and instead **reads those outlets' own RSS feeds on our
+server** (plus Google News searches, which carry Reuters): the headlines, summaries and links go to Claude as material
+and count as retrieved sources for the trusted-news rule. Official documents (NSE PDFs, press releases) are downloaded
+by the server and given to Claude directly. `trader.run reel --slot feeds` lists which feeds answer; change them under
+`reel.news_feeds: {name: url}`. Several outlets suddenly carrying market-moving headlines (3+ in 30 minutes) start the
+catch-up search early.
+
 Trusted news (Addendum 23, enforced in `trader/reel/market.py`): an official NSE announcement, or an item found by a
 web search limited to official sites (RBI, SEBI, PIB, exchanges, US government) and established business outlets,
 kept only with one official source or two different outlets among the pages actually retrieved. Index and sector

@@ -176,3 +176,37 @@ def test_only_major_news_becomes_a_feed_reel_notable_goes_to_stories_and_the_nig
     chosen, alerts, st = breaking.watch({"seen": ["nse:4"]}, NOW, get, SIZE, {})
     assert chosen is None and any("Story-worthy" in a for a in alerts)
     assert st["covered"][-1]["importance"] == "notable"                       # it will be in RAAT KI REPORT
+
+
+def test_the_server_downloads_the_official_document_itself():
+    pdf = breaking.document("https://nsearchives.nseindia.com/x.pdf",
+                            lambda u: SimpleNamespace(status_code=200, content=b"%PDF-1.7 ...", text=""))
+    assert pdf["source"]["media_type"] == "application/pdf"
+    page = "<html><script>x()</script><h1>RBI keeps repo rate at 5.5%</h1>" + "<p>Policy text.</p>" * 40 + "</html>"
+    html = breaking.document("https://www.rbi.org.in/pr", lambda u: SimpleNamespace(status_code=200,
+                                                                                  content=page.encode(), text=page))
+    assert html["source"]["type"] == "text" and "repo rate" in html["source"]["data"] and "x()" not in html["source"]["data"]
+    assert breaking.document("https://u", lambda u: SimpleNamespace(status_code=404, content=b"", text="")) is None
+
+
+def test_sites_that_block_the_search_are_learned_dropped_and_the_request_retried(tmp_path, monkeypatch):
+    import anthropic
+    import httpx2
+    from trader.reel import market
+    monkeypatch.setattr(market, "BLOCKED_FILE", tmp_path / "blocked.json")
+    sent = []
+
+    def create(**kw):
+        sent.append(list(kw["tools"][0]["allowed_domains"]))
+        if len(sent) == 1:
+            req = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+            raise anthropic.BadRequestError(
+                "Error code: 400 - The following domains are not accessible to our user agent: ['bbc.com']",
+                response=httpx2.Response(400, request=req), body=None)
+        return "ok"
+    client = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
+    tool = {"type": "web_search_20260209", "name": "web_search", "allowed_domains": ["reuters.com", "bbc.com",
+                                                                                     "business-standard.com"]}
+    assert market.create(client, False, model="m", max_tokens=1, messages=[], tools=[tool]) == "ok"
+    assert sent == [["bbc.com", "business-standard.com"], ["business-standard.com"]]     # reuters: known blocked
+    assert "bbc.com" in market.blocked()

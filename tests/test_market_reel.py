@@ -120,7 +120,7 @@ def test_web_news_searches_only_trusted_sites_resumes_a_paused_turn_and_applies_
     assert tool["type"] == "web_search_20260209" and "dol.gov" in tool["allowed_domains"]
     assert c.calls[0]["model"] == "claude-opus-5-5" and c.calls[0]["fallbacks"] == "default"
     assert len(c.calls) == 3 and c.calls[1]["messages"][1]["role"] == "assistant"    # resumed after pause_turn
-    assert [i["headline"][:7] for i in items] == ["US susp"] and "IT +3.02%" in c.calls[0]["messages"][0]["content"]
+    assert [i["headline"][:7] for i in items] == ["US susp"] and "IT +3.02%" in c.calls[0]["messages"][0]["content"][-1]["text"]
     assert [d["text"][:8] for d in web["drivers"]] == ["IT index"] and web["cues"][0]["what"] == "Brent crude"
     assert note.startswith("1 of 2 news items, 1 of 4 reasons, 1 of 1 global cues and 0 of 0 results passed")
 
