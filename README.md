@@ -413,11 +413,21 @@ Each evening one plain-language Telegram message says what is open, what it woul
 each position can lose, and the running total. The verdict comes from the 14-year test (`research/fo20.py`), not
 from the paper weeks; state in `trader/state/fo_paper.json`.
 
-### Daily education Reel for Instagram (trader/reel)
-`trader.run reel` (every day 07:40 IST) makes a 60-90 second vertical Hinglish video and sends it to you on Telegram
-with a ready-to-paste caption; you watch it and post it yourself. Each Reel: a hook, one plain money lesson, one fact
-from this project's own tests, and (when there is one) an official NSE announcement from a heavily traded company,
-explained - with how shares reacted to that TYPE of news in the past (research Addendum 22), never a call on the share.
+### Daily education Reels for Instagram (trader/reel)
+`trader.run reel` (07:40 IST) and, if `reel.evening: true`, `trader.run reel --slot evening` (18:40) each make a 45-60
+second vertical Hinglish video and send it to you on Telegram with a ready-to-paste caption and a question to pin as the
+first comment; you watch it and post it yourself. Each Reel is ONE topic, in one of three numbered series:
+
+| Series | When | What |
+|---|---|---|
+| MYTH vs SACH | every morning | a popular market belief, checked against this project's own tests, and the concept behind it |
+| NEWS SAMJHO | evening, when there is notable news | one official NSE announcement from a heavily traded company, explained, with how shares reacted to that TYPE of news in the past (Addendum 22) - never a call on the share; routine ESOP allotments are skipped |
+| MARKET KI KAHANI | evening, otherwise | a settled episode of market history (Harshad Mehta, Satyam, 2008, Karvy, IL&FS...) told as a story, with its lesson |
+
+Built for watch time (research notes: `trader/reel/RESEARCH.md`): a hook in the first beat, 8-12 beats with a new
+picture every beat, word-by-word captions with the current word highlighted, a progress bar, big numbers, trimmed
+pauses, loudness -14 LUFS, a comment question and tomorrow's teaser at the end, episode numbers. Numbers are spelled out
+for the voice (2536 -> "दो हज़ार पाँच सौ छत्तीस"; "Nifty 50" stays "Nifty fifty").
 
 Education only (SEBI's Jan 2025 circular: unregistered people may not give investment advice or make performance
 claims). The script is written by Claude from the facts the bot passes in, then checked by rules: no instruction to
@@ -434,6 +444,7 @@ reel:
   voice_id: <ID>                       # optional: overrides ELEVENLABS_VOICE_ID from the vault
   voice_model: eleven_multilingual_v2  # default eleven_flash_v2_5; eleven_v3 is the most expressive
   speak: devanagari                    # the voice reads Hindi words in Devanagari (captions stay Roman); default roman
+  evening: true                        # the second daily Reel (news explained, or a market-history story)
 ```
 **Choosing the voice:** `trader.run voices` sends Telegram clips of the same Hinglish lines read by your own voices and
 the most used Hindi voices of the Voice Library (about 3k credits); `trader.run voices --voice <ID>` reads them 4 ways

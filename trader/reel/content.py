@@ -1,7 +1,17 @@
-"""What a Reel talks about: one money lesson, one research fact from our own tests, and (when there is one) one piece
-of official NSE news explained - with how shares reacted to that TYPE of news in the past, never a call on the share."""
+"""What a Reel talks about. Each Reel is ONE topic, in one of three series:
+
+  MYTH vs SACH   a popular market belief, checked against this project's own pre-registered tests, with the concept
+                 behind it explained (morning, every day)
+  NEWS SAMJHO    one official NSE announcement from a heavily traded company, explained - with how shares reacted to
+                 that TYPE of news in the past, never a call on the share (evening, when there is notable news)
+  MARKET KI KAHANI  a settled episode of Indian market history (scams, crashes) told as a story, with its lesson
+                 (evening, when there is no notable news)
+
+Only "what did NOT work" findings are used: results where a rule beat the market are left out, so nothing can read as
+a performance claim (SEBI, Jan 2025)."""
 from __future__ import annotations
 
+import re
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -72,6 +82,73 @@ RESEARCH = [
 ]
 
 
+LESSON = dict(LESSONS)
+
+# (myth, what our own tests found, the lesson that explains it) - myths are worded as questions, never as instructions
+MYTHS = [
+    ("Intraday trading se roz ki pakki kamai?", RESEARCH[0], "Delivery vs intraday"),
+    ("80% baar jeetne wali strategy = paisa hi paisa?", RESEARCH[1], "Win rate ka dhokha"),
+    ("Trend ke saath options lo, paisa banega?", RESEARCH[2], "Options basics"),
+    ("Har mahine crash insurance lena hamesha samajhdari?", RESEARCH[3], "Options basics"),
+    ("Quality aur value index hamesha market se aage?", RESEARCH[4], "Backtest ka jaal (overfitting)"),
+    ("Achhe numbers wali company = agla multibagger?", RESEARCH[5], "P/E ratio simple bhasha mein"),
+    ("Company ke accounts padh ke fraud pakad loge?", RESEARCH[6], "Diversification"),
+    ("Screener se nikle stocks market ko hara dete hain?", RESEARCH[10], "Backtest ka jaal (overfitting)"),
+    ("52-week low wala share = sasta share?", RESEARCH[11], "P/E ratio simple bhasha mein"),
+    ("Buyback ki news = pakka fayda?", RESEARCH[12], "Trading cost ka asar"),
+    ("Profit 20% badha, toh share bhi badhega?", RESEARCH[13], "P/E ratio simple bhasha mein"),
+    ("Bada order mila, toh share upar hi jayega?", RESEARCH[14], "Win rate ka dhokha"),
+    ("Purane data par best rule = future ka best rule?", RESEARCH[15], "Backtest ka jaal (overfitting)"),
+    ("F&O = jaldi ameer banne ka shortcut?", LESSON["F&O ka sach"], "Options basics"),
+    ("Stop-loss lagaya, toh nuksaan khatam?", LESSON["Stop-loss kya hai"], "Stop-loss kya hai"),
+    ("Midcap hamesha zyada return deta hai?", LESSON["Midcap kya hai"], "Diversification"),
+    ("Aaj ki top companies dekh ke strategy test kar lo?", LESSON["Survivorship bias"], "Survivorship bias"),
+    ("Kam fees se kya hi farak padta hai?", LESSON["Trading cost ka asar"], "Compounding"),
+]
+
+# settled history only: court convictions, regulator orders, official data. Numbers here are the only numbers used.
+STORIES = [
+    ("Harshad Mehta, 1992", "The Sensex rose from about 1,200 in mid-1991 to about 4,500 in April 1992 - almost 4 times. Harshad Mehta was "
+     "found to have pulled bank money into shares through bank receipts (BRs) that were not backed by real securities. "
+     "Journalist Sucheta Dalal exposed it in April 1992; the market crashed and the scam was estimated at about "
+     "₹4,000-5,000 crore. Mehta was convicted in some of the cases and died in 2001 while others were still on.", "A rally built on borrowed or illegal money "
+     "ends badly; rules and regulators got stricter after it."),
+    ("Satyam, January 2009", "On 7 January 2009 Satyam's chairman Ramalinga Raju wrote that the company's cash and "
+     "bank balance of about ₹5,000 crore did not exist. The share fell about 78% that day. Raju and others were "
+     "convicted in 2015. In our own test, a 7-pillar company scoring framework rated Satyam #1 in 2009 - on the "
+     "falsified numbers.", "Numbers in filings cannot reveal fraud; diversification limits the damage."),
+    ("Ketan Parekh, 2000-01", "In 2000-01 a group of stocks called the 'K-10' rose many times over. Ketan Parekh was "
+     "found to have used circular trading and money from a co-operative bank to push prices. When it broke in 2001 "
+     "the stocks crashed and the bank failed. SEBI later barred him from the market.", "A share that only goes up "
+     "with no business reason is a warning sign, not an opportunity."),
+    ("2008 ka crash", "In January 2008 the Sensex was near 21,000. By October 2008 it was below 8,000 - a fall of "
+     "more than 60% in ten months, during the global financial crisis. Midcaps fell about 73%. The Sensex was back "
+     "above 20,000 by late 2010.", "Crashes happen; a mix of assets and patience matter more than timing."),
+    ("COVID crash, March 2020", "The Nifty 50 fell from about 12,400 in January 2020 to about 7,600 on 23 March 2020, "
+     "a fall of almost 40% in two months. By the end of 2020 it was at a new high above 13,000.", "Panic selling at "
+     "the bottom locks in losses; nobody can time the bottom."),
+    ("NSEL, 2013", "In July 2013 the National Spot Exchange (NSEL) stopped paying. About ₹5,600 crore of investors' "
+     "money was stuck. The 'paired contracts' traded there had been sold as safe, fixed-return products.", "A "
+     "'fixed return' in a market product is a red flag; check who regulates it."),
+    ("Karvy, 2019", "In November 2019 SEBI found that Karvy Stock Broking had pledged its clients' shares, worth more "
+     "than ₹2,000 crore, to raise loans for itself. After this, the rules changed so that a broker can no longer "
+     "pledge clients' shares without the client's own approval.", "Check your demat statement; your shares should be "
+     "in your name."),
+    ("IL&FS, 2018", "In September 2018 IL&FS, a big lender rated AAA until shortly before, defaulted. Its group debt "
+     "was over ₹90,000 crore. Some debt mutual funds that held its bonds saw their value fall.", "A top credit "
+     "rating is an opinion, not a guarantee; even 'safe' debt can default."),
+    ("Franklin Templeton, April 2020", "In April 2020 Franklin Templeton closed six of its debt mutual fund schemes, "
+     "holding about ₹25,000 crore, because it could not sell their bonds fast enough. Investors waited months to "
+     "years for their money, paid back in parts.", "Higher yield usually means higher risk, also in debt funds."),
+    ("Yes Bank, March 2020", "In March 2020 the RBI took control of Yes Bank and limited withdrawals to ₹50,000 per "
+     "account for about two weeks. About ₹8,400 crore of its AT1 bonds were written down to zero.", "Complex "
+     "high-interest products can lose everything; know what you own."),
+    ("SEBI ka F&O study, 2024", "SEBI studied individual F&O traders for three years, FY22 to FY24: 93% of them lost "
+     "money, with total losses of about ₹1.8 lakh crore. Only about 1% made more than ₹1 lakh a year after costs.",
+     "Leverage magnifies mistakes; most people lose."),
+]
+
+
 def pick(seq, today: date):
     return seq[today.toordinal() % len(seq)]
 
@@ -89,20 +166,35 @@ def news_item(today: date, store: Optional[Path] = None) -> Optional[dict]:
     f = f[f["date"] >= (today - timedelta(days=1)).isoformat()]
     if f.empty:
         return None
-    size = _traded_value(store)
+    size, known = _traded_value(store), _consistent_types()
     best = None
     for r in f.itertuples():
+        if ROUTINE.search(f"{r.subject} {r.text}"):                     # e.g. shares allotted to employees (ESOPs)
+            continue
         types = classify(r.subject, r.text)
         if not types:
             continue
         v = size.get(r.symbol, 0.0)
-        if best is None or v > best["value"]:
+        rank = (types[0] in known, v)                                   # a type with a real track record first
+        if v >= 10 and (best is None or rank > best["rank"]):           # only well-known, heavily traded companies
             best = {"symbol": r.symbol, "type": types[0], "subject": r.subject, "text": r.text[:300], "date": r.date,
-                    "link": r.link, "value": v}
-    if best is None or best["value"] < 10:                               # only well-known, heavily traded companies
+                    "link": r.link, "value": v, "rank": rank}
+    if best is None:
         return None
+    best.pop("rank")
     best["history"] = _reaction(best["type"])
     return best
+
+
+ROUTINE = re.compile(r"\b(esops?|esos|esps|employee stock|stock options? (?:scheme|plan)|employees? stock)\b", re.I)
+
+
+def _consistent_types() -> set:
+    p = ROOT / "research" / "news22_results.csv"
+    if not p.exists():
+        return set()
+    r = pd.read_csv(p)
+    return set(r.loc[r["consistent"].astype(bool), "type"])
 
 
 def _traded_value(store: Path) -> Dict[str, float]:
