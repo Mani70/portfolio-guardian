@@ -37,10 +37,11 @@ def test_strong_stock_is_a_buy_idea_in_an_up_market_with_its_reasons():
     assert "UP" in rep.buys.index and "DOWN" not in rep.buys.index
     assert "DOWN" in rep.avoids.index
     text = "\n".join(I.compose(rep, {}))
-    assert "🟢 UP" in text and "Trend: above its 50-day" in text and "idea is wrong below" in text
-    assert "🔴 DOWN" in text and "What would change the view" in text
-    assert "information only" in text and "Filings (30 days): none on NSE." in text
-    assert "20-year test (2011-2026)" in text and "no proven edge" in text
+    assert "🟢 UP — " in text and "Rising steadily: today's price is above its average price of the last 50" in text
+    assert "Exit level (\"stop-loss\")" in text and "Market mood: RISING" in text
+    assert "🔴 DOWN — " in text and "What would change this view" in text
+    assert "Information only" in text and "Company announcements on NSE (30 days): none." in text
+    assert "15 years" in text and "no proven edge" in text
 
 
 def test_down_market_gives_no_buy_but_a_labelled_watchlist_and_the_reason():
@@ -48,7 +49,7 @@ def test_down_market_gives_no_buy_but_a_labelled_watchlist_and_the_reason():
     rep = I.screen(I.facts(p), I.market(p), {})
     assert rep.buys.empty and "UP" in rep.watch.index
     text = "\n".join(I.compose(rep, {}))
-    assert "No BUY idea today" in text and "market itself is in a downtrend" in text
+    assert "No BUY idea today" in text and "the overall market is falling" in text and "Market mood: FALLING" in text
     assert "WATCHLIST" in text and "👀 UP" in text
 
 
@@ -58,7 +59,7 @@ def test_nothing_qualifying_is_explained_by_the_funnel():
     rep = I.screen(I.facts(p), I.market(p), {})
     text = "\n".join(I.compose(rep, {}))
     assert rep.buys.empty and rep.avoids.empty
-    assert "• liquid (≥ ₹10 cr a day" in text and "no stock passed 'liquid" in text
+    assert "• easy to buy and sell (₹10 crore+ traded a day" in text and "no stock passed the check 'easy to buy" in text
     assert "No AVOID idea today" in text
 
 
@@ -66,7 +67,7 @@ def test_unchecked_filings_are_said_to_be_unchecked_never_none():
     p = _panel(market_up=True)
     rep = I.screen(I.facts(p), I.market(p), None)
     text = "\n".join(I.compose(rep, None))
-    assert "NOT checked today" in text and "none on NSE" not in text
+    assert "NOT checked today" in text and "): none." not in text
 
 
 def test_red_flag_filing_blocks_a_buy_and_weak_holdings_are_flagged():
@@ -76,7 +77,7 @@ def test_red_flag_filing_blocks_a_buy_and_weak_holdings_are_flagged():
     assert "UP" not in rep.buys.index
     assert list(rep.holdings_weak.index) == ["DOWN"]
     text = "\n".join(I.compose(rep, flags))
-    assert "YOU HOLD THIS" in text
+    assert "YOU OWN THIS" in text and "Stocks YOU OWN that look weak" in text
 
 
 def test_messages_fit_telegram():
@@ -102,7 +103,8 @@ def test_track_record_and_once_a_day(tmp_path):
     old = I.Report(p["close"].index[-30], rep.market, rep.buys, rep.avoids, [], [], 0, 0)
     I.record(old, tmp_path / "ideas.csv")
     line = I.track_record(p, tmp_path / "ideas.csv")
-    assert line.startswith("Track record:") and "BUY ideas (" in line and "vs Nifty ETF" in line
+    assert line.startswith("📈 How earlier ideas turned out:") and "• BUY ideas, 20 trading days (about a month)" in line
+    assert "Nifty 50 fund did" in line
     (tmp_path / "state.json").write_text('{"sent": "2026-10-08"}')
     assert I.run(print, today=date(2026, 10, 8), update=False, store=tmp_path) == "insights: already sent today"
 
@@ -149,12 +151,13 @@ def test_valuation_line_and_both_track_records(tmp_path):
                   "div_yield": 30 / pe}).to_csv((tmp_path / "valuation").mkdir() or tmp_path / "valuation" / "pepb.csv",
                                                 index=False)
     line = I.valuation_line(date(2021, 7, 1), update=False, vdir=tmp_path / "valuation")
-    assert "P/E 15.0 (above 0% of days since 1999)" in line and "dividend yield 2.00% (above 100%" in line
+    assert "CHEAP" in line and "cost 15.0 times their yearly profit" in line and "more expensive than 0% of days" in line
+    assert "pay 2.00% of their price" in line and "more than on 100% of days" in line
     assert I.valuation_line(date(2021, 7, 1), update=False, vdir=tmp_path / "none") == ""
     p = _panel()
     rep = I.screen(I.facts(p), I.market(p), {})
     I.record(I.Report(p["close"].index[-70], rep.market, rep.buys, rep.avoids, [], [], 0, 0), tmp_path / "ideas.csv")
     both = I.track_records(p, tmp_path / "ideas.csv")
-    assert "with 20 sessions since" in both and "with 60 sessions since" in both
+    assert "20 trading days (about a month)" in both and "60 trading days (about 3 months)" in both
     text = "\n".join(I.compose(rep, {}, both, valuation=line))
-    assert "Nifty 50 valuation" in text and "does not judge the business" in text
+    assert "Are shares cheap or expensive right now?" in text and "not at the company's business" in text
