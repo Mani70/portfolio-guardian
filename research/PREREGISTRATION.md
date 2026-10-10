@@ -744,3 +744,13 @@ least 10 points smaller.
 What changes: every strategy runs on paper for 3-4 weeks from the next monthly expiry, with a plain-language Telegram
 report each evening (position, value, profit or loss, what happens next). Real money only for a strategy that passed
 here, one lot, defined risk, and only on the owner's decision after the paper run.
+
+## Addendum 20a (10 Oct 2026, before the paper run and before any F&O result): what the paper run trades
+
+The monthly strategies open at the first session after a monthly expiry (late October 2026) and expire about four
+weeks later, so a 3-4 week paper run sees one monthly cycle opened and valued daily, not settled. To see complete
+cycles, the paper run also trades the weekly versions of S1 and S2 (opened the session after each weekly expiry,
+held to the next). Paper prices are NSE's closing prices from the day's F&O file (published each evening), the same
+prices and cost model as the test; the paper run reports, for each position, what it would be worth if closed at
+today's close. Nothing in the paper run changes a verdict: the 14-year test decides, the paper run checks the
+mechanics.
