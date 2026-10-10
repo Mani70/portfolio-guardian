@@ -28,10 +28,10 @@ def _frames(d):
 def test_low_yield_is_expensive_less_nifty_more_cash(tmp_path):
     s = CoreAllocation("core", {"weights": W, "valuation": _history(tmp_path, 1.01)})
     t = s.targets(_frames(date(2026, 9, 30)), date(2026, 9, 30))
-    assert s.last_regime["name"] == "expensive" and "above 1% of days" in s.last_regime["why"]
+    assert s.last_regime["name"] == "expensive" and "more than on 1% of days" in s.last_regime["why"] and "EXPENSIVE" in s.last_regime["why"]
     assert abs(t["NIFTYBEES"] - 0.30) < 1e-9 and abs(t["LIQUIDCASE"] - 0.25) < 1e-9 and abs(sum(t.values()) - 1) < 1e-9
     why = s.needs_rebalance({k: v for k, v in W.items()}, t, date(2026, 9, 30), False)
-    assert why.startswith("NIFTYBEES 45% vs target 30%") and "expensive" in why
+    assert why.startswith("NIFTYBEES 45% vs target 30%") and "shares are EXPENSIVE" in why
 
 
 def test_high_yield_is_cheap_more_nifty_no_cash(tmp_path):
@@ -46,8 +46,8 @@ def test_middle_stale_or_missing_data_means_no_tilt(tmp_path):
     assert s.targets(_frames(date(2026, 9, 30)), date(2026, 9, 30)) == W and s.last_regime["name"] == "neutral"
     old = _history(tmp_path, 1.01, end="2026-08-14")
     r = V.regime(old, date(2026, 9, 30))
-    assert r["name"] == "neutral" and "from 14 Aug 2026" in r["why"]
-    assert V.regime({**TILT, "_dir": str(tmp_path / "none")}, date(2026, 9, 30))["why"].endswith("no Nifty 50 valuation data")
+    assert r["name"] == "neutral" and "is from 14 Aug 2026" in r["why"]
+    assert V.regime({**TILT, "_dir": str(tmp_path / "none")}, date(2026, 9, 30))["why"].startswith("price-level check skipped (no Nifty 50 valuation data)")
 
 
 def test_regime_is_read_at_the_month_end_anchor(tmp_path):

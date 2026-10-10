@@ -69,15 +69,26 @@ def regime(params: dict, d: date, sessions=None, holidays=(), vdir: Optional[Pat
     v = load(Path(vdir or params.get("_dir") or DIR))
     p = percentile(v, measure, at) if v is not None and measure in v.columns else None
     if p is None:
-        return {"name": "neutral", "weights": {}, "why": "valuation tilt off: no Nifty 50 valuation data"}
+        return {"name": "neutral", "weights": {},
+                "why": "price-level check skipped (no Nifty 50 valuation data), so the usual mix applies"}
     label = "dividend yield" if measure == "div_yield" else measure.upper().replace("_", " ")
     if (at - p["date"]).days > int(params.get("max_age_days", 10)):
         return {"name": "neutral", "weights": {},
-                "why": f"valuation tilt off: the latest Nifty 50 {label} is from {p['date']:%d %b %Y}"}
+                "why": f"price-level check skipped (the latest Nifty 50 {label} is from {p['date']:%d %b %Y}), so the "
+                       "usual mix applies"}
     high_is_cheap = measure == "div_yield"
     rich = p["pct"] <= cut if high_is_cheap else p["pct"] >= 100 - cut
     cheap = p["pct"] >= 100 - cut if high_is_cheap else p["pct"] <= cut
     name = "expensive" if rich else "cheap" if cheap else "neutral"
-    why = (f"Nifty 50 {label} {p['value']:.2f} on {p['date']:%d %b %Y}, above {p['pct']:.0f}% of days since 1999: "
-           f"{name}")
-    return {"name": name, "weights": dict((params.get(name) or {}) if name != "neutral" else {}), "why": why}
+    word = {"expensive": "EXPENSIVE", "cheap": "CHEAP", "neutral": "NORMAL"}[name]
+    then = {"expensive": "so the plan holds less of the Nifty 50 fund and more cash",
+            "cheap": "so the plan holds more of the Nifty 50 fund and no cash",
+            "neutral": "so the usual mix applies"}[name]
+    if high_is_cheap:
+        detail = (f"the Nifty 50 companies pay {p['value']:.2f}% of their price as dividends ({p['date']:%d %b %Y}), "
+                  f"more than on {p['pct']:.0f}% of days since 1999; a lower figure means more expensive shares")
+    else:
+        detail = (f"the Nifty 50 {label} is {p['value']:.2f} ({p['date']:%d %b %Y}), above {p['pct']:.0f}% of days "
+                  "since 1999")
+    return {"name": name, "weights": dict((params.get(name) or {}) if name != "neutral" else {}),
+            "why": f"shares are {word}: {detail}, {then}"}

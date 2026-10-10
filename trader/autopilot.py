@@ -24,6 +24,8 @@ from typing import List, Optional
 
 import yaml
 
+from . import plain
+
 log = logging.getLogger("trader.autopilot")
 
 LIVE_GATE = True                     # Addendum 12: the 20-year test replaces paper months for the rulebook's rules
@@ -101,7 +103,7 @@ def transfer_positions(j, src: str, dst: str) -> List[str]:
         else:
             p.strategy = dst
             j.save_position(p)
-        notes.append(f"{p.symbol}: {abs(p.qty)} units moved from {src} to {dst} (cost ₹{p.avg_price:,.2f} kept)")
+        notes.append(f"• {abs(p.qty)} units of {plain.fund(p.symbol)} (bought at ₹{p.avg_price:,.2f} each)")
     return notes
 
 
@@ -129,8 +131,8 @@ def handover(cfg: dict, journal_path: Path) -> List[str]:
         finally:
             j.close()
     if notes:
-        notes.insert(0, f"Autopilot: the retired strategies' holdings now belong to {ap['core']} (rule {ap['rule']}); "
-                        "it trims or tops them up to its mix:")
+        notes.insert(0, "Holdings bought by strategies that have been switched off now belong to your long-term "
+                        "portfolio (no shares were bought or sold for this); it will trim or top them up to its mix:")
     return notes
 
 
@@ -140,13 +142,14 @@ def describe(cfg: dict, root: Path) -> str:
     if not ap:
         return ""
     last = load_state(root).get("last_retest") or {}
-    line = f"autopilot: rule {ap['rule']}" + (f" (re-tested {last.get('date')}: {last.get('decision')})" if last
-                                              else " (not re-tested yet)")
+    line = (f"Rules in use: {'the long-term mix' if ap['rule'] == 'L1' else 'the safer fallback mix'} "
+            f"(rule {ap['rule']}); the yearly check of these rules against history "
+            + (f"last ran on {last.get('date')}: {last.get('decision')}" if last else "has not run yet (first in January)"))
     vp = ((cfg.get("strategies") or {}).get(ap["core"]) or {}).get("params", {}).get("valuation")
     if vp:
         from datetime import date
         from .valuation import regime
-        line += "; " + regime(vp, date.today())["why"]
+        line += ". Price level: " + regime(vp, date.today())["why"]
     return line
 
 

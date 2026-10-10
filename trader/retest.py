@@ -117,13 +117,18 @@ def run(root: Path, notify=None, update: bool = True, force: bool = False, today
                  last_retest={"year": year, "date": now_iso_date(), "decision": why, **res})
     state.setdefault("history", []).append({"year": year, "rule": rule, "test1": res["test1"], "test2": res["test2"]})
     save_state(root, state)
-    msg = (f"Autopilot re-test for {year} (data to {res['end']}):\n"
-           f"test 1, 2006-{year}: Sharpe L1 {f['l1_sharpe']:.2f} vs Nifty 50 {f['bench_sharpe']:.2f}, worst fall "
-           f"{f['l1_fall']:.1f}% vs {f['bench_fall']:.1f}% -> {'pass' if res['test1'] else 'FAIL'}\n"
-           f"test 2, {year - 4}-{year}: Sharpe {l5['l1_sharpe']:.2f} vs {l5['bench_sharpe']:.2f} -> "
-           f"{'pass' if res['test2'] else 'FAIL'}\n"
-           f"Decision: {why}." + (f" The core moves from {before} to {rule} at the next evening run (an ordinary "
-                                  "rebalance)." if rule != before else ""))
+    names = {"L1": "your long-term mix (rule L1)", "F": "the safer fallback mix (rule F: Nifty 50 fund and cash)"}
+    msg = (f"📅 Yearly check of your investing rules (prices up to {res['end']})\n"
+           "Each year the bot re-runs its rules on all market history to make sure they still work. 'Score' below "
+           "means return earned per unit of up-and-down movement (higher is better).\n"
+           f"• Check 1, everything since 2006: score {f['l1_sharpe']:.2f} vs {f['bench_sharpe']:.2f} for simply holding "
+           f"the Nifty 50, worst fall {f['l1_fall']:.0f}% vs {f['bench_fall']:.0f}% -> "
+           f"{'PASS' if res['test1'] else 'FAIL'}\n"
+           f"• Check 2, the last 5 years ({year - 4}-{year}): score {l5['l1_sharpe']:.2f} vs {l5['bench_sharpe']:.2f} -> "
+           f"{'PASS' if res['test2'] else 'FAIL'}\n"
+           f"Decision: {why}. Now using {names.get(rule, rule)}."
+           + (f" The switch from {names.get(before, before)} happens at the next evening run, as an ordinary "
+              "rebalance." if rule != before else ""))
     if notify:
         notify(msg)
     return msg

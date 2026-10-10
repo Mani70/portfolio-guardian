@@ -93,7 +93,7 @@ def test_health_funds_line_warns_when_account_is_short(tmp_path, monkeypatch):
     monkeypatch.setattr(ib.IndStocksBroker, "available_funds", lambda self, p: 19_000.0)
     ok, warn = [], []
     health.funds_line(cfg, object(), ok, warn)                    # short: shown as attention, sized from the account
-    assert warn and "₹19,000" in warn[0] and "₹75,000" in warn[0] and "~25% of plan" in warn[0]
+    assert warn and "₹19,000" in warn[0] and "₹75,000" in warn[0] and "about 25% of the plan" in warn[0]
     cfg["capital"]["live_from_account"] = False
     ok, warn = [], []
     health.funds_line(cfg, object(), ok, warn)
@@ -124,10 +124,10 @@ def test_health_holdings_line(tmp_path, monkeypatch):
 
     ok, warn = [], []
     health.holdings_line({"journal": "j.db"}, Client(58), ok, warn)
-    assert ok == ["holdings match: MON100 58"] and not warn
+    assert ok == ["Your holdings match the bot's records ✓: MON100 58"] and not warn
     ok, warn = [], []
     health.holdings_line({"journal": "j.db"}, Client(20), ok, warn)
-    assert warn and "MON100 bot 58 vs account 20" in warn[0] and "reconcile --fix" in warn[0]
+    assert warn and "MON100: bot thinks 58, account has 20" in warn[0] and "reconcile --fix" in warn[0]
 
 
 def test_health_tells_new_holdings_once(tmp_path, monkeypatch):

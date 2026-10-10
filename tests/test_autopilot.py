@@ -73,7 +73,7 @@ def test_handover_moves_retired_holdings_in_both_books_but_waits_for_working_ord
     live.save_position(Position("momentum_rotation", "INFY", "CNC", 5, 1500.0, t, "M0"))
     live.close(), paper.close()
     notes = AP.handover(c, jp)
-    assert any("MON100: 55 units" in n for n in notes) and not any("INFY" in n for n in notes)
+    assert any("55 units of MON100" in n for n in notes) and not any("INFY" in n for n in notes)
     live, paper = Journal(jp, "live"), Journal(jp, "paper")
     assert [p.symbol for p in live.positions(strategy="core")] == ["MON100"]
     assert [p.symbol for p in paper.positions(strategy="core")] == ["MON100"]

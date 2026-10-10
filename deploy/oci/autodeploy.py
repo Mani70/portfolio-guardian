@@ -55,7 +55,7 @@ def main(argv=None) -> int:
         return 0
     log = sh("git", "log", "--format=- %s", f"{head}..{new}").stdout.strip()
     if trading_job_running():
-        notify("Deploy postponed: a trading job is still running; tried again tomorrow evening.", dry)
+        notify("🔧 Bot update postponed: a trading job was still running. It will try again tomorrow evening.", dry)
         return 0
     if sh("git", "status", "--porcelain", "--untracked-files=no").stdout.strip():
         notify("Deploy NOT done: code on the server was edited by hand (`git status` shows changes). "
@@ -73,7 +73,8 @@ def main(argv=None) -> int:
         t = sh(PY, "-m", "pytest", "-q", "tests", cwd=tmp, check=False)
         if t.returncode != 0:
             tail = "\n".join((t.stdout + t.stderr).strip().splitlines()[-12:])
-            notify(f"Deploy NOT done: the new code's tests fail; the running version stays.\nNew commits:\n{log}\n\n"
+            notify(f"🔧 Bot update NOT installed: the new version failed its automatic checks, so the current "
+                   f"version keeps running safely.\nWhat would have changed:\n{log}\n\nCheck details:\n"
                    f"{tail[-1500:]}", dry)
             return 1
         if dry:
@@ -83,7 +84,8 @@ def main(argv=None) -> int:
         cron = (ROOT / "deploy" / "oci" / "crontab").read_text(encoding="utf-8").replace("__APP__", str(ROOT))
         sh("crontab", "-", input_text=cron)
         passed = (t.stdout.strip().splitlines() or ["tests passed"])[-1]
-        notify(f"Deployed {new[:7]} ({passed}):\n{log}", dry)
+        notify(f"🔧 Bot updated to the latest version on GitHub (all automatic checks passed: {passed}).\n"
+               f"What changed:\n{log}", dry)
         return 0
     finally:
         sh("git", "worktree", "remove", "--force", str(tmp), check=False)

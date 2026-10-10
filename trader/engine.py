@@ -26,7 +26,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from . import corporate
+from . import corporate, plain
 from .corporate import describe as describe_ratio
 from .brokers.base import Fill
 from .gates import check_live_drawdown, is_demoted, paper_gate
@@ -100,7 +100,8 @@ class Engine:
         if self.mode == "lab":
             return                                      # paper experiments: log only (failures: run._run_each)
         if self.notifier and (force or not self.quiet):
-            self.notifier.send(f"[{self.mode.upper()}] {text}")
+            tag = {"live": "💰 REAL MONEY", "paper": "📄 PRACTICE (no real money)"}.get(self.mode, self.mode.upper())
+            self.notifier.send(f"[{tag}] {text}")
 
     def _allowed(self, strat):
         if not self.broker.live:
@@ -323,8 +324,10 @@ class Engine:
                 # (corporate.ca_ref) compares the last fill with its own day's candle instead
                 pos.meta = {**(pos.meta or {}), "ca_px": f.price, "ca_day": f.time.date().isoformat()}
             self.j.save_position(pos)
-            self._say(f"{'Bought' if r.side == BUY else 'Sold short'} {f.qty} {r.symbol} @ ₹{f.price:,.2f} "
-                      f"({r.strategy}{', stop ₹%.2f' % r.stop if r.stop else ''})")
+            self._say(f"✅ {'Bought' if r.side == BUY else 'Sold short'} {f.qty} units of {plain.fund(r.symbol)} at "
+                      f"₹{f.price:,.2f} each ({plain.rupees(f.qty * f.price)} in all) for {plain.strategy(r.strategy)}."
+                      + (f" Safety exit (\"stop-loss\"): the bot sells if the price falls to ₹{r.stop:,.2f}."
+                         if r.stop else ""))
             return
         if pos is None or (f.leg != "main" and pos.entry_tag != f.tag):
             self.j.event("warning", f"exit fill {f.tag}/{f.leg} x{f.qty} but no matching open position for {r.symbol}")
@@ -344,7 +347,11 @@ class Engine:
             pos.entry_charges *= remaining / abs(pos.qty)
             pos.qty = remaining if pos.qty > 0 else -remaining
             self.j.save_position(pos)
-        self._say(f"Closed {q} {r.symbol} @ ₹{f.price:,.2f} ({reason}), net ₹{net:,.0f} [{r.strategy}]")
+        why_sold = {"stop": " (its safety exit, the \"stop-loss\" price, was reached)",
+                    "target": " (its target price was reached)"}.get(reason, "")
+        self._say(f"✅ Sold {q} units of {plain.fund(r.symbol)} at ₹{f.price:,.2f} each ({plain.rupees(q * f.price)}) "
+                  f"for {plain.strategy(r.strategy)}{why_sold}. Result on these units after all charges: "
+                  f"{'profit' if net >= 0 else 'loss'} {plain.rupees(abs(net))}.")
         if self.broker.live:
             self._dd_check.add(r.strategy)
 
@@ -698,9 +705,11 @@ class Engine:
         if lines:
             nxt = self.market.next_session_after(now)
             when = f"{nxt:%d %b}" if nxt else "next"
-            self._say(f"Swing orders for the {when} open (limit ±{band * 100:.0f}% of today's close):\n"
+            self._say(f"📝 Tonight's plan: orders for the market opening on {when}\n"
                       + "\n".join(lines) + (f"\n{sizing}" if sizing else "")
-                      + "\nTo stop them: run `python -m trader.run cancel` before 09:00.")
+                      + f"\nEach order has a price limit {band * 100:.0f}% away from today's closing price, so it "
+                        "never buys or sells at a surprise price; an order that is not filled tomorrow is cancelled."
+                        "\nTo cancel these orders: run `python -m trader.run cancel` on the server before 09:00.")
         return placed
 
     def _allocate(self, strat, frames, d: date, now: datetime, band: float, positions) -> Tuple[List[Order], List[str]]:
@@ -736,6 +745,9 @@ class Engine:
                 return placed, lines
             self._buy_to_target(strat, frames, target, vals, total, current, f"invest ₹{idle:,.0f} new cash", now,
                                 band, positions, False, placed, lines)
+            if lines:
+                lines.insert(0, f"{plain.strategy(strat.name).capitalize()}. Why: "
+                                f"{plain.rebalance_reason(f'invest {plain.rupees(idle)} new cash')} - buying only.")
             return placed, lines
         why = "winding down" if exit_only else strat.needs_rebalance(current, target, d, str(period).endswith("-12"))
         strat._pending_period = period
@@ -760,7 +772,7 @@ class Engine:
                 continue
             hold = self._ca_hold(p, now, price_check=False)
             if hold:
-                lines.append(f"SELL {s} held ({hold})")
+                lines.append(f"• SELL of {plain.fund(s)} on hold: {hold}")
                 trouble = True
                 continue
             sig = Signal(strat.name, s, SELL, "exit", 1.0, px, now, CNC,
@@ -771,10 +783,13 @@ class Engine:
             if o:
                 placed.append(o)
                 selling = selling or o.status in (NEW, OPEN, PARTIAL, FILLED)
-                lines.append(f"SELL {qty} {s} ({sig.reason})")
+                lines.append(f"• SELL {qty} units of {plain.fund(s)} (about {plain.rupees(qty * px)}): "
+                             f"{current.get(s, 0):.0%} of the portfolio now, target {target.get(s, 0):.0%}")
         trouble |= self._buy_to_target(strat, frames, target, vals, total, current, why, now, band, positions,
                                        selling, placed, lines)
         strat.commit(ok=not trouble)
+        if lines:
+            lines.insert(0, f"{plain.strategy(strat.name).capitalize()}. Why: {plain.rebalance_reason(why)}.")
         return placed, lines
 
     def _buy_to_target(self, strat, frames, target, vals, total, current, why, now, band, positions, selling,
@@ -798,7 +813,9 @@ class Engine:
                 trouble = True                          # waits for the sale money / funds: again tomorrow
             if o:
                 placed.append(o)
-                lines.append(f"BUY {o.req.qty} {s} ~₹{px:,.2f} ({sig.reason})")
+                lines.append(f"• BUY {o.req.qty} units of {plain.fund(s)} at about ₹{px:,.2f} each "
+                             f"({plain.rupees(o.req.qty * px)}): {current.get(s, 0):.0%} of the portfolio now, "
+                             f"target {w:.0%}")
         return trouble
 
     def _unpark(self, park_pos: Position, frames, now: datetime, band: float, positions) -> Optional[Order]:
