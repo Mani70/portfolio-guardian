@@ -594,6 +594,20 @@ def cmd_reel(cfg, args) -> int:
     n = Notifier(dry_run=args.dry_run)
     from .holidays import load as load_holidays
     rc = cfg.get("reel") or {}
+    if args.slot == "breaking":
+        bc = rc.get("breaking") or {}
+        if not bc.get("enabled", True):
+            print("reel (breaking): off (trader.yaml reel: {breaking: {enabled: false}})")
+            return 0
+        from datetime import date as _date
+        from .reel import breaking, job as reel_job
+        mk = lambda f: reel_job.make(_date.today(), handle=str(rc.get("handle", "")),   # noqa: E731
+                                     voice_model=bc.get("voice_model", "eleven_flash_v2_5"),
+                                     voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman")),
+                                     facts_override=f)
+        print(breaking.run(n.send, n.send_video, mk, feeds=bc.get("feeds"),
+                           max_per_day=int(bc.get("max_per_day", 3))))
+        return 0
     if args.slot == "company" and not rc.get("company", True):
         print("reel (company): off (trader.yaml reel: {company: false})")
         return 0
@@ -886,7 +900,7 @@ def main(argv=None) -> int:
     ap.add_argument("--forget", action="store_true",
                     help="cancel: mark earlier-day orders INDstocks no longer knows as cancelled (check the app first)")
     ap.add_argument("--topic", default="", help="reel: myth:N, story:N (trader/reel/content.py) or company:SYMBOL")
-    ap.add_argument("--slot", default="morning", choices=["morning", "market", "evening", "company"],
+    ap.add_argument("--slot", default="morning", choices=["morning", "market", "evening", "company", "breaking"],
                     help="reel: which Reel (company = the weekly COMPANY KI KUNDLI case study)")
     ap.add_argument("--voice", default="", help="voices: compare models and spellings for this voice ID")
     ap.add_argument("--model", default="", help="voices: ElevenLabs model for the first test")

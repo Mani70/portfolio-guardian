@@ -1,0 +1,252 @@
+"""BREAKING SAMJHO: a short Reel within minutes of official, market-moving news - first, but only from the source.
+
+  python -m trader.run reel --slot breaking     # cron every 5 minutes, 08:00-23:55 (job.sh never runs two at once)
+
+What counts (official sources only - speed never beats trust):
+- NSE announcements of well-known companies (trading >= ₹200 crore a day): results, and the Addendum 22 event types
+  (order won, acquisition, rating change, auditor / CEO resignation, default, buyback, bonus, split, fund raising);
+  statements, clarifications and "material" disclosures of these companies go to a quick Claude check first;
+- press releases of RBI, SEBI, the Government of India (PIB) and the US Federal Reserve that match market words
+  (feeds can be changed in trader.yaml reel.breaking.feeds).
+
+Claude reads the official document itself (web fetch of the NSE PDF / press release) and writes only what it says;
+the Reel quotes the source, says what it means, and history for that type of news (Addendum 22) - never a share
+price, share move, forecast or call. At most `max_per_day` Reels a day (default 3), 30 minutes apart; anything
+beyond that, and anything Claude judges not material, comes as a one-line Telegram alert instead.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+import xml.etree.ElementTree as ET
+from datetime import date, datetime, timedelta
+from pathlib import Path
+from typing import List, Literal, Optional
+
+import requests
+from pydantic import BaseModel, Field
+
+from . import market
+
+log = logging.getLogger("trader.reel.breaking")
+FEEDS = {"RBI": "https://www.rbi.org.in/pressreleases_rss.xml",
+         "SEBI": "https://www.sebi.gov.in/sebirss.xml",
+         "Government of India (PIB)": "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3",
+         "US Federal Reserve": "https://www.federalreserve.gov/feeds/press_all.xml"}
+MACRO = re.compile(r"repo rate|monetary policy|policy rate|\bcrr\b|\bslr\b|inflation|\bgdp\b|tariff|customs duty|"
+                   r"\bgst\b|h-?1b|\bvisa|green card|\bperm\b|futures|options|\bf&o\b|derivative|margin|\bipo\b|"
+                   r"mutual fund|interest rate|federal funds|\bfomc\b|sanction|crude|budget|income tax|"
+                   r"foreign portfolio|\bfpi\b|listing|insider|ban\b|penalt", re.I)
+CHECK_FIRST = re.compile(r"\bupdates?\b|clarification|material|press release|statement|outcome of board", re.I)
+RESULTS = re.compile(r"financial result", re.I)
+BIG = 200.0                                                               # ₹ crore traded a day: well-known companies
+
+
+class Point(BaseModel):
+    text: str = Field(description="One fact exactly as the document states it, with numbers and dates")
+
+
+class Breaking(BaseModel):
+    material: bool = Field(description="True only if this could matter to many investors (a big number, a policy "
+                                       "change, a leadership exit, a default, a large deal) - routine filings are False")
+    headline: str
+    points: List[Point] = Field(description="3-6 facts from the document; for results: revenue, profit and their "
+                                            "change from a year earlier, reasons given, dividend")
+    why_it_matters: str = Field(description="Which part of the market it concerns and why, as general facts - no "
+                                            "forecast, no share price or share move, no buy/sell")
+    sector: Literal["IT", "Bank", "Pharma", "Auto", "FMCG", "Metal", "Realty", "Energy", "Oil & Gas", "Whole market",
+                    "Other"]
+    companies: List[str]
+
+
+READ = """Read this official document and report what it says, for Indian retail investors: {url}
+
+It is: {what}
+
+Use the web_fetch tool on that exact URL. Report only facts stated in the document, with their numbers and dates. Then say plainly whether it is material for many investors (a big number, a policy change, a leadership exit, a default, a large deal) or routine."""
+
+STRUCTURE = """Turn these notes on an official document into the fields. Only facts from the notes; no share price, share move, forecast, target or buy/sell view.
+
+NOTES:
+{notes}"""
+
+
+# ---------------------------------------------------------------- sources
+def nse_new(get, seen: set, today: date, size: dict) -> List[dict]:
+    """New announcements of well-known companies worth a look, oldest first."""
+    import sys
+    sys.path.insert(0, str(market.ROOT / "research"))
+    from news22 import classify                                            # the study's own definitions
+    rows = get(f"corporate-announcements?index=equities&from_date={today:%d-%m-%Y}&to_date={today:%d-%m-%Y}") or []
+    out = []
+    for r in rows:
+        sid = f"nse:{r.get('seq_id')}"
+        if sid in seen or size.get(r.get("symbol"), 0) < BIG:
+            continue
+        cat, text = r.get("desc") or "", r.get("attchmntText") or ""
+        kinds = classify(cat, text)
+        kind = ("results" if RESULTS.search(cat + " " + text) else kinds[0] if kinds else
+                "check" if CHECK_FIRST.search(cat) else None)
+        if kind and r.get("attchmntFile"):
+            out.append({"id": sid, "source": "NSE", "kind": kind, "symbol": r.get("symbol"),
+                        "company": r.get("sm_name") or r.get("symbol"), "title": f"{cat}: {text[:200]}",
+                        "url": r["attchmntFile"], "time": r.get("an_dt"), "value": size.get(r.get("symbol"), 0)})
+    return sorted(out, key=lambda x: x["time"] or "")
+
+
+def feed_new(feeds: dict, seen: set, fetch=None, max_age_hours: int = 12) -> List[dict]:
+    """New items of the official press-release feeds that use market words."""
+    fetch = fetch or (lambda url: requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0"}))
+    out = []
+    for name, url in feeds.items():
+        try:
+            r = fetch(url)
+            if r.status_code != 200:
+                continue
+            root = ET.fromstring(r.content)
+        except Exception as e:                                             # noqa: BLE001 - one feed down is fine
+            log.warning("feed %s: %s", name, e)
+            continue
+        for it in root.iter("item"):
+            title, link = (it.findtext("title") or "").strip(), (it.findtext("link") or "").strip()
+            sid = f"feed:{link or title}"
+            if not link or sid in seen or not MACRO.search(title + " " + (it.findtext("description") or "")):
+                continue
+            out.append({"id": sid, "source": name, "kind": "macro", "symbol": "", "company": name, "title": title,
+                        "url": link, "time": it.findtext("pubDate") or "", "value": 0})
+    return out
+
+
+def priority(c: dict) -> tuple:
+    order = {"results": 0, "macro": 1, "check": 3}
+    return (order.get(c["kind"], 2), -c["value"])
+
+
+# ---------------------------------------------------------------- reading the document
+def read(c: dict, client=None) -> Optional[dict]:
+    """Claude reads the official document (web fetch) and returns the facts, or None if it could not."""
+    import anthropic
+    if client is None and not os.getenv("ANTHROPIC_API_KEY"):
+        return None
+    client = client or anthropic.Anthropic()
+    tool = {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 2,
+            "allowed_domains": market.OFFICIAL + ["nseindia.com"]}
+    what = f"{c['source']} - {c['company']}: {c['title']}"
+    messages = [{"role": "user", "content": READ.format(url=c["url"], what=what)}]
+    notes, fetched = [], False
+    try:
+        for _ in range(3):
+            resp = client.beta.messages.create(
+                model=market.MODEL, max_tokens=16000, messages=messages, tools=[tool],
+                output_config={"effort": "low"}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+            for b in resp.content:
+                if b.type == "web_fetch_tool_result" and getattr(b.content, "type", "") == "web_fetch_result":
+                    fetched = True
+                elif b.type == "text":
+                    notes.append(b.text)
+            if resp.stop_reason != "pause_turn":
+                break
+            messages = messages[:1] + [{"role": "assistant", "content": resp.content}]
+        if not (fetched and notes):
+            return None
+        parsed = client.beta.messages.parse(
+            model=market.MODEL, max_tokens=8000, output_format=Breaking, output_config={"effort": "low"},
+            messages=[{"role": "user", "content": STRUCTURE.format(notes="\n".join(notes)[:40000])}],
+            betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+        b = parsed.parsed_output
+    except anthropic.APIError as e:
+        log.warning("breaking read failed: %s", e)
+        return None
+    if b is None:
+        return None
+    from .script import share_talk
+    from .company import BANNED
+    pts = [p.text for p in b.points if not share_talk(p.text) and not BANNED.search(p.text)]
+    if not market.safe_text(f"{b.headline} {b.why_it_matters}", b.companies) or len(pts) < 2:
+        return None
+    return {"material": b.material, "headline": b.headline, "points": pts, "why_it_matters": b.why_it_matters,
+            "sector": b.sector, "companies": b.companies, "url": c["url"], "source": c["source"]}
+
+
+def facts(c: dict, got: dict, episode: int) -> dict:
+    """The script facts for the breaking Reel (reusing the NEWS SAMJHO explainers)."""
+    from .content import _reaction
+    f = {"date": date.today().isoformat(), "format": "news", "series": "BREAKING SAMJHO", "breaking": True,
+         "episode": episode, "companies": got["companies"] + ([c["company"]] if c["symbol"] else [])}
+    src = [got["url"]]
+    if c["kind"] == "results":
+        f["results"] = {"company": c["company"], "quarter": "the latest quarter", "official": True,
+                        "points": [{"text": p, "source_urls": src} for p in got["points"]]}
+    else:
+        f["macro"] = {"headline": got["headline"], "facts": " ".join(got["points"]), "official": True,
+                      "why_it_matters": got["why_it_matters"], "sector": got["sector"], "companies": got["companies"],
+                      "source_urls": src}
+        hist = _reaction(c["kind"]) if c["kind"] not in ("macro", "check") else None
+        f["history"] = [hist] if hist else []
+    return f
+
+
+# ---------------------------------------------------------------- the watch
+def watch(state: dict, now: datetime, get, size: dict, feeds: dict, max_per_day: int = 3, gap_min: int = 30,
+          client=None, fetch=None, learn_only: bool = False) -> tuple[Optional[dict], List[str], dict]:
+    """(facts for one Reel or None, alert lines, new state). learn_only: just remember what is already out."""
+    today = now.date().isoformat()
+    seen = set(state.get("seen", []))
+    made = [t for t in state.get("made", []) if t.startswith(today)]
+    cands = nse_new(get, seen, now.date(), size) + feed_new(feeds, seen, fetch)
+    alerts, chosen, reads = [], None, 0
+    for c in sorted(cands, key=priority):
+        seen.add(c["id"])
+        if learn_only:
+            continue
+        room = len(made) < max_per_day and (not made or now - datetime.fromisoformat(made[-1]) >=
+                                            timedelta(minutes=gap_min))
+        if chosen is None and room and reads < 3:                         # at most 3 documents read per run
+            reads += 1
+            got = read(c, client)
+            if got and got["material"]:
+                chosen = facts(c, got, state.get("episode", 0) + 1)
+                made.append(now.isoformat(timespec="minutes"))
+                alerts.append(f"🚨 {c['source']} - {got['headline']}\n{c['url']}")
+                continue
+            if got is None and c["kind"] == "check":
+                continue                                                   # unread routine filing: stay quiet
+        if c["kind"] != "check":
+            alerts.append(f"📰 {c['source']} - {c['company']}: {c['title'][:160]}\n{c['url']}")
+    new = {"seen": sorted(seen)[-3000:], "made": made, "episode": state.get("episode", 0) + (1 if chosen else 0)}
+    return chosen, alerts, new
+
+
+def run(notify, send_video, make, now: Optional[datetime] = None, out_dir: Optional[Path] = None, client=None,
+        get=None, size: Optional[dict] = None, feeds: Optional[dict] = None, max_per_day: int = 3,
+        fetch=None) -> str:
+    now = now or datetime.now()
+    out_dir = out_dir or market.ROOT / "cache" / "reel"
+    p = out_dir / "breaking.json"
+    state = json.loads(p.read_text()) if p.exists() else {}
+    if get is None:
+        s = market.nse_session()
+        get = lambda path: market._get(s, path)                           # noqa: E731
+    if size is None:
+        size = market._traded_value(market.ROOT / "cache" / "insights")
+    first_run = not state
+    chosen, alerts, state = watch(state, now, get, size, FEEDS if feeds is None else feeds, max_per_day,
+                                  client=client, fetch=fetch, learn_only=first_run)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(state))
+    if first_run:                                                          # the first run only learns what is old
+        return f"breaking: started watching ({len(state['seen'])} items already published today)"
+    if chosen is None:
+        for a in alerts[:5]:
+            notify(a)
+        return f"breaking: nothing made ({len(alerts)} alerts)"
+    r = make(chosen)
+    ok = send_video(r["video"], f"🚨 BREAKING SAMJHO - post now ({now:%H:%M})")
+    notify(f"📝 Caption (copy-paste):\n\n{r['caption']}")
+    notify("Breaking Reel: watch it once, open the source link, then post. "
+           f"Script: {r['script_source']}. Voice: {r['voice']}." + ("" if ok else f" Video on the server: {r['video']}"))
+    for a in alerts[1:5]:
+        notify(a)
+    return f"breaking: sent ({chosen.get('results', chosen.get('macro', {})).get('headline', 'results')})"

@@ -247,6 +247,11 @@ def _brief(facts: dict) -> str:
         parts += [f"TRUE STORY from Indian market history - {t}: {story}", f"ITS LESSON: {lesson}",
                   "Tell it like a thriller: the rise, the secret, the fall, the lesson. Use only these facts.",
                   "Beat kinds to use: hook, story, twist, takeaway, question."]
+    if facts.get("breaking"):
+        parts.append("BREAKING SAMJHO: this is published minutes after the official source. 35-50 seconds: 7-9 beats, "
+                     "90-130 words. Beat 1 says the news in at most 10 words ('Abhi abhi...'). Beat 2 names the "
+                     "official source. Explain what it means simply; quote history only if given. End with a short "
+                     "comment question. Never a share price, share move, forecast or buy/sell.")
     if facts.get("next"):
         parts.append(f"TOMORROW'S TOPIC (tease it in the last beat): {facts['next']}")
     return "\n".join(parts)
@@ -285,6 +290,8 @@ def write(facts: dict, client=None) -> tuple[ReelScript, str]:
                 issues.append(f"caption: '{BANNED.search(script.caption).group(0)}'")
         if facts.get("format") in ("market", "company"):                               # the wrap is a little longer
             issues = [i for i in issues if not i.startswith("narration is") or not 120 <= _words(script) <= 230]
+        if facts.get("breaking"):                                         # the breaking Reel is shorter
+            issues = [i for i in issues if not i.startswith("narration is") or not 70 <= _words(script) <= 190]
         if not issues:
             for d in vet_spoken(script, companies):
                 log.warning("voice text not used, %s", d)

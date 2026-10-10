@@ -425,6 +425,7 @@ first comment; you watch it and post it yourself. Each Reel is ONE topic, in one
 | MARKET KI KAHANI | evening, otherwise | a settled episode of market history (Harshad Mehta, Satyam, 2008, Karvy, IL&FS...) told as a story, with its lesson |
 | MARKET AAJ | weekdays 19:15 (again 21:00 if NSE is late; holidays skip) | the day's market wrap: Nifty, Bank, Midcap, Smallcap, sectors, breadth, India VIX, FII/DII flows, the day's trusted news explained, what history says after such days (Addendum 23), and what is due on the next session. With it comes a **daily market brief** on Telegram with every news source link |
 | COMPANY KI KUNDLI | Sundays 10:40 | one well-known company (26 in rotation, `--topic company:SYMBOL` for a chosen one): what it does, how it earns, its size, turning points and the risks it reports - every fact from a trusted page the search retrieved; never its share price, market value, valuation, a target or a buy/sell view (`trader/reel/company.py`) |
+| BREAKING SAMJHO | every 5 minutes, 08:00-23:55 | official, market-moving news within minutes: NSE announcements of well-known companies (results, orders, deals, rating changes, exits, defaults, buybacks, splits; their statements and clarifications after a quick Claude check) and RBI / SEBI / PIB / US Federal Reserve press releases with market words. Claude reads the official document itself (web fetch) and writes only what it says. Max 3 a day, 30 minutes apart; the rest come as one-line alerts (`trader/reel/breaking.py`) |
 
 Trusted news (Addendum 23, enforced in `trader/reel/market.py`): an official NSE announcement, or an item found by a
 web search limited to official sites (RBI, SEBI, PIB, exchanges, US government) and established business outlets,
@@ -479,6 +480,15 @@ for one voice - eleven_multilingual_v2 / eleven_v3, Hindi in Roman letters / in 
 trader.yaml lines (about 1.1k credits). In `speak: devanagari` Claude writes each scene twice: the Roman narration that
 is checked and shown, and the same words with Hindi in Devanagari for the voice; a voice line that adds a call, a
 prediction or a promise, or has different numbers, is dropped and that scene is voiced from the Roman narration.
+
+Breaking Reels use `eleven_flash_v2_5` by default (faster, half the credits); settings:
+```yaml
+reel:
+  breaking: {enabled: true, max_per_day: 3, voice_model: eleven_flash_v2_5}   # feeds: {name: rss url} to change sources
+```
+**Credits at full volume** (07:40 + 19:15 + 21:30 daily, Sundays, ~2 breaking a day) come to roughly 150-170k
+ElevenLabs credits a month with eleven_multilingual_v2 - more than a 100k-credit plan; check the plan's monthly
+credits on elevenlabs.io and either move up a plan or set `voice_model: eleven_flash_v2_5` (about half).
 
 Voice credits: the default model (eleven_flash_v2_5) uses about 20-22k ElevenLabs credits a month for a daily Reel
 (Starter plan: 30k); eleven_multilingual_v2 sounds better and needs about 40-44k (Creator plan); check eleven_v3's

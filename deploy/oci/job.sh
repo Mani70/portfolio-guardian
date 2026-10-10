@@ -2,7 +2,7 @@
 # Runs one scheduled job: logs to logs/cron/<job>.log, never two copies of the same job at once,
 # a time limit per job, and a Telegram alert if the job fails or times out.
 #
-#   deploy/oci/job.sh intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|insights|fo-paper|reel|reel-market|reel-evening|reel-company|reboot
+#   deploy/oci/job.sh intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|insights|fo-paper|reel|reel-market|reel-evening|reel-company|reel-breaking|reboot
 set -uo pipefail
 
 APP="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -31,7 +31,8 @@ case "$job" in
   reel-evening) limit=30m; cmd=(-m trader.run reel --slot evening) ;;
   reel-market) limit=40m; cmd=(-m trader.run reel --slot market) ;;
   reel-company) limit=40m; cmd=(-m trader.run reel --slot company) ;;
-  *) echo "usage: $0 intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|insights|fo-paper|reel|reel-market|reel-evening|reel-company|reboot" >&2; exit 2 ;;
+  reel-breaking) limit=15m; cmd=(-m trader.run reel --slot breaking) ;;
+  *) echo "usage: $0 intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|insights|fo-paper|reel|reel-market|reel-evening|reel-company|reel-breaking|reboot" >&2; exit 2 ;;
 esac
 
 mkdir -p logs/cron

@@ -125,9 +125,12 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
 
 def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = None, handle: str = "",
          voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
-         slot: str = "morning", episodes: Optional[dict] = None, topic: str = "", day: Optional[dict] = None) -> dict:
-    facts = facts_for(today, slot, episodes or {}, store, topic, day, out_dir)
+         slot: str = "morning", episodes: Optional[dict] = None, topic: str = "", day: Optional[dict] = None,
+         facts_override: Optional[dict] = None) -> dict:
+    facts = facts_override or facts_for(today, slot, episodes or {}, store, topic, day, out_dir)
     sc, source = S.write(facts, client)
+    if facts.get("breaking"):
+        slot = f"breaking{facts['episode']}"
     work = out_dir / f"work_{today:%Y%m%d}_{slot}"
     if work.exists():
         shutil.rmtree(work)
@@ -142,7 +145,7 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
                                   prev=said[i - 1] if i else None, nxt=said[i + 1] if i + 1 < len(said) else None)
         voices.add(vsrc)
         scenes.append((kind, on_screen, narration, audio))
-    top = f"{S.SERIES[facts['format']]}  •  EP {facts['episode']}"
+    top = f"{facts.get('series') or S.SERIES[facts['format']]}  •  EP {facts['episode']}"
     video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}_{slot}.mp4", work, handle, top)
     tags = " ".join("#" + h.lstrip("#").replace(" ", "") for h in sc.hashtags[:8])
     caption = f"{top}\n\n{sc.caption}\n\n{S.CAPTION_DISCLAIMER}\n\n{tags}"
