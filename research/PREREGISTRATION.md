@@ -792,3 +792,27 @@ F3 variants); the rest of the space has not been looked at in that period.
 
 What changes: a family choice that passes goes to a paper run (at least 3 months) and then to the owner. A search
 with no pass ends the short-term research: the published video says so plainly.
+
+## Addendum 22 (10 Oct 2026, before any announcement is downloaded): how shares reacted to official news
+
+Purpose: the owner's education Reel explains authentic news. It may say how shares reacted to that TYPE of news in
+the past, never what a particular share will do. This study supplies those facts.
+
+Data (research/news22.py): every NSE corporate announcement 2012 - Sep 2026 (www.nseindia.com/api/
+corporate-announcements: time, company, category, first line of text); prices from the survivorship-free bhavcopy
+panel (corporate actions applied); market = the Nifty 50.
+
+Event types, by NSE's category or the announcement's own words (case-insensitive), fixed now:
+buyback; bonus issue; stock split; credit rating upgrade; credit rating downgrade; statutory auditor resigned;
+managing director / CEO / CFO resigned; order or contract won; acquisition; fund raising (QIP, preferential,
+rights); default or insolvency; and, from Addendum 18's annual results with their filing times, annual profit up more
+than 20%, profit down more than 20%, and a loss.
+
+Measure: the share's move minus the Nifty 50's move, from the close before the news (news after 15:30 counts from
+the next session) to the close 1, 5 and 20 sessions later. Only shares trading at least ₹1 crore a day (median of 20
+sessions before the news). One company's repeat news of the same type within 20 sessions counts once.
+
+Reported per type: number of events, average and median move, share of events that beat the Nifty, t-statistic
+(events grouped by date). A type is described as having a "consistent pattern" only if its 5-session average has
+the same sign in 2012-2018 and 2019-2026 and |t| >= 3 over the whole period (11+ types are tested). Otherwise the
+video says "no reliable pattern". No trading rule follows from this study: it is for explaining news.
