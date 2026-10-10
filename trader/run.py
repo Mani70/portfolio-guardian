@@ -14,6 +14,7 @@
   python -m trader.run retest         # autopilot: the yearly re-test of its rule (January; --force any time)
   python -m trader.run insights       # evening: swing ideas with reasons on Telegram (information only, never traded)
   python -m trader.run fo-paper       # evening: F&O practice run on paper (Addenda 20/20a; never an order)
+  python -m trader.run reel           # morning: the daily education Reel -> Telegram for you to review and post
   python -m trader.run report         # P&L per strategy vs the Nifty ETF, charges, tax estimate -> Telegram
   python -m trader.run reconcile      # live positions vs real INDstocks holdings (--fix to correct the record)
   python -m trader.run keep --stock X --qty N   # keep N shares out of the bot's pending sell of X (after 16:00)
@@ -584,6 +585,16 @@ def cmd_fo_paper(cfg, args) -> int:
     return 0
 
 
+def cmd_reel(cfg, args) -> int:
+    """The daily Hinglish education Reel (trader/reel): video and caption to Telegram, for the owner to post."""
+    from guardian.notifier import Notifier
+    from .reel.job import run
+    n = Notifier(dry_run=args.dry_run)
+    rc = cfg.get("reel") or {}
+    print(run(n.send, n.send_video, handle=str(rc.get("handle", "")), voice_model=rc.get("voice_model")))
+    return 0
+
+
 def cmd_retest(cfg, args) -> int:
     """Yearly re-test of the autopilot's rule (trader/retest.py; Addendum 14)."""
     from guardian.notifier import Notifier
@@ -817,7 +828,7 @@ def cmd_reconcile(cfg, args) -> int:
         j.close()
 
 
-COMMANDS = {"check": cmd_check, "adopt": cmd_adopt, "transfer": cmd_transfer, "retest": cmd_retest, "insights": cmd_insights, "fo-paper": cmd_fo_paper, "report": cmd_report, "reconcile": cmd_reconcile, "universe": cmd_universe, "holidays": cmd_holidays, "indices": cmd_indices, "split": cmd_split, "keep": cmd_keep, "watch": cmd_watch, "test-order": cmd_test_order, "preview": cmd_preview, "status": cmd_status, "cancel": cmd_cancel, "flatten": cmd_flatten,
+COMMANDS = {"check": cmd_check, "adopt": cmd_adopt, "transfer": cmd_transfer, "retest": cmd_retest, "insights": cmd_insights, "fo-paper": cmd_fo_paper, "reel": cmd_reel, "report": cmd_report, "reconcile": cmd_reconcile, "universe": cmd_universe, "holidays": cmd_holidays, "indices": cmd_indices, "split": cmd_split, "keep": cmd_keep, "watch": cmd_watch, "test-order": cmd_test_order, "preview": cmd_preview, "status": cmd_status, "cancel": cmd_cancel, "flatten": cmd_flatten,
             "swing-plan": cmd_swing_plan, "swing-check": cmd_swing_check, "intraday": cmd_intraday}
 
 

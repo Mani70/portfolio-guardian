@@ -29,7 +29,8 @@ from typing import Callable, Dict, Optional
 log = logging.getLogger("guardian.secrets")
 
 KEYS = ("INDSTOCKS_CLIENT_ID", "INDSTOCKS_MPIN", "INDSTOCKS_TOTP_SECRET", "INDSTOCKS_ACCESS_TOKEN",
-        "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "OCI_BACKUP_PAR_URL")
+        "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "OCI_BACKUP_PAR_URL",
+        "ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID")       # the daily Reel (trader/reel)
 SOURCE_VAR = "PG_SECRETS_SOURCE"
 _loaded = False
 

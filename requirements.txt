@@ -6,4 +6,7 @@ tzdata>=2024.1   # Windows has no built-in time-zone database
 pandas>=2.0      # backtester
 numpy>=1.24      # backtester
 matplotlib>=3.7  # backtester chart (optional)
+anthropic>=1.13      # the daily Reel's script (trader/reel)
+imageio-ffmpeg>=0.5  # ffmpeg for the Reel's video, no system package needed
+pillow>=10.0
 pytest>=8.0

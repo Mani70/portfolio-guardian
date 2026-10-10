@@ -629,3 +629,103 @@ What this means for the framework (retain / revise / reject before using it on t
 - Reject: using the score to pick a concentrated 20-stock portfolio or to hunt multibaggers. Measured blind, it found
   them no better than chance; the famous winners were mid-ranked or caught late.
 - Outcome as pre-registered: nothing goes to Telegram or paper; real money stays on the rulebook.
+
+## Addendum 20: defined-risk Nifty options, Feb 2012 - Sep 2026 (10 Oct 2026; pre-registered; research/fo20.py)
+
+Data: NSE's daily F&O files, 3,642 sessions (2 missing), 7.4 million Nifty futures and options rows; each strike's
+own closing price, only strikes that traded that day. Per lot of 65 (today's size), ₹3.84 lakh account, one
+position at a time, every charge and slippage included. A = Feb 2012 - Dec 2018, B = Jan 2019 - Sep 2026.
+
+| Monthly, held to expiry | months won | average a month (t) | worst month | account a year (liquid fund) | worst fall |
+|---|---|---|---|---|---|
+| S1 bull put spread 3%/6%, A | 79% | -₹925 (-1.42) | -₹21,253 (-5.5%) | 4.6% (6.9%) | -6.9% |
+| S1 bull put spread 3%/6%, B | 86% | +₹419 (+0.39) | -₹48,312 (-12.6%) | 6.5% (4.9%) | -7.4% |
+| S2 iron condor 4%/7%, A | 64% | -₹1,223 (-1.95) | -₹15,657 | 3.8% (6.9%) | -7.0% |
+| S2 iron condor 4%/7%, B | 72% | -₹983 (-0.77) | -₹47,123 (-12.3%) | 2.1% (4.9%) | -21.4% |
+| S4 trend option buying, A | 35% | -₹1,209 (-0.88) | -₹15,507 | 3.0% (6.9%) | -17.3% |
+| S4 trend option buying, B | 33% | -₹1,790 (-0.53) | -₹45,155 (-11.8%) | 0.3% (4.9%) | -50.4% |
+
+Verdicts against the pre-registered bars - **all four FAIL**:
+- **S1 bull put spread: FAIL.** It wins 4 months in 5, which is why it is popular, but before charges it earned about
+  ₹47 a month on average and the charges took ₹258: the market prices these options fairly, and costs make the
+  difference negative. The losing months are large: -₹48,312 (Oct 2024), -₹47,151 (Sep 2026), -₹45,051 (Mar 2026),
+  each about 12% of the account in one month; a single such month wipes out roughly 18 average winning months.
+  Neighbours: the same picture (negative in A, slightly positive in B, never significant).
+- **S2 iron condor: FAIL.** Negative even before charges (-₹652 a month), worse after (-₹1,096); worst fall -21%.
+- **S4 trend option buying: FAIL.** Wins one month in three; the account lost half its value in B (worst fall -50%).
+  Buying options loses the time value every month, and the trend does not pay for it.
+- **S3 crash insurance: FAIL.** A put 5% below cost 1.1-1.7% of the Nifty's value a year. It cut the worst fall in B
+  (the 2020 crash) from -26% to -17% but lowered the return per unit of risk in both periods (Sharpe 0.19 vs 0.25 in
+  B, -0.12 vs 0.03 in A) and barely changed the worst fall in A. (These Nifty figures cover only the days a position
+  was open; the session after each expiry is outside both sides of the comparison, so the comparison is fair, but
+  the "Nifty held" return is not the Nifty's full return.)
+- Weekly versions, 2019 on (no bar): the bull put spread won 82% of 398 weeks for +₹178 a week on average (t 1.20,
+  not reliable), worst week -₹30,210; the iron condor averaged -₹9 a week.
+
+What this means: in 14 years of real NSE prices, none of the standard defined-risk option strategies beat leaving
+the money in a liquid fund by a margin that is not chance, after costs. This matches SEBI's finding that most
+individual F&O traders lose. Outcome as pre-registered: the 4-week paper run goes ahead to check the mechanics (its
+report states these verdicts); no F&O with real money.
+
+## Addendum 21: one disciplined search for a short-term edge (10 Oct 2026; pre-registered; research/search21.py)
+
+256 rules, fixed in advance: 136 swing rules on the 100 most traded stocks (reversal, breakout, momentum, pullback,
+volume surge; holds of 1-20 sessions; with and without a market filter), 20 intraday rules (gap fades and follows,
+yesterday's losers and gainers), 100 Nifty option rules (put spreads and condors at 16 strike settings, held or closed
+at half profit, monthly and weekly, a trend filter; long straddles and strangles). Costs: 0.44% a delivery round trip,
+0.20% intraday, Addendum 20's option charges. Chosen on 2012-2019 only (t >= 3.5, profitable in 2012-15 and 2016-19),
+then tested once on 2020-2026.
+
+| family | qualified on 2012-19 | choice | test on 2020-26 |
+|---|---|---|---|
+| swing stocks (136) | 0 (best t 1.16: buy 2-day oversold stocks in an uptrend, hold 20 days) | none | - |
+| intraday stocks (20) | 12 | short stocks that open 1%+ above yesterday's close, cover at the close (t 7.44) | **FAIL**: +0.12% a trade after costs, t 1.81 (bar 2), worst fall -43% (bar -25%); 20% a year |
+| Nifty options (100) | 0 (best t 1.03: weekly iron condor 3%/6%) | none | - |
+
+**Verdict: no rule passes.** What the numbers say:
+- Swing rules on large stocks: nothing came close; momentum, breakouts and dip-buying all earn about their costs.
+- Intraday gap rules looked strong in 2012-2015 and faded steadily: fading 1%+ gap-ups made 0.54% a trade in
+  2012-15, 0.24% in 2016-19 and 0.12% in 2020-26; buying 3%+ gap-downs fell from 1.90% to 0.42%. Even the remaining
+  edge is doubtful: daily data assumes a fill at NSE's official opening price (the pre-open auction), and on real
+  5-minute prices (Jun 2024 - Oct 2026, FINDINGS "Intraday") fading gaps lost money. A -43% worst fall rules it out
+  for this account anyway.
+- Buying yesterday's biggest losers at the open lost 0.32% a trade (t -8): "buy the dip" intraday is costly.
+- Option selling, 100 ways: no setting earns more than its costs and tail losses (best t 1.03).
+
+Outcome as pre-registered: the short-term research ends here. The video says so plainly; the live money stays on the
+long-term rulebook.
+
+## Addendum 22: how NSE shares reacted to official news, 2012 - Sep 2026 (10 Oct 2026; pre-registered; research/news22.py)
+
+1.48 million NSE corporate announcements (every one, by date windows; none failed), classified by the pre-registered
+rules, plus Addendum 18's annual results as filed: 117,219 classified events; after the ₹1 crore-a-day liquidity
+filter and one-per-20-sessions, the counts below. Move = the share's move minus the Nifty 50's, from the close before
+the news to 5 sessions later.
+
+| type | events | 5-session move vs Nifty (median) | beat the Nifty | t | 2012-18 / 2019-26 | consistent |
+|---|---|---|---|---|---|---|
+| order or contract won | 1,872 | +1.34% (+0.45%) | 54% | 6.72 | +0.33% / +1.43% | yes |
+| stock split | 527 | +1.18% (+0.60%) | 55% | 3.47 | +0.72% / +1.38% | yes |
+| acquisition | 18,252 | +0.48% (-0.08%) | 49% | 3.34 | +0.33% / +0.55% | yes |
+| annual loss | 752 | -1.07% (-1.60%) | 40% | -3.46 | -0.98% / -1.13% | yes |
+| MD / CEO / CFO resigned | 1,375 | -0.74% (-0.93%) | 42% | -3.86 | -1.09% / -0.63% | yes |
+| rating upgrade | 493 | +0.85% | 53% | 2.70 | +0.78% / +0.90% | no (t < 3) |
+| bonus issue | 546 | +0.75% | 52% | 1.99 | +0.91% / +0.63% | no |
+| annual profit down 20%+ | 1,183 | -0.89% | 39% | -2.90 | -0.87% / -0.91% | no (t < 3) |
+| annual profit up 20%+ | 2,543 | -0.21% | 43% | -0.52 | -0.76% / +0.14% | no |
+| fund raising | 2,536 | +0.25% | 45% | 0.78 | | no |
+| buyback | 1,000 | +0.03% | 49% | 0.16 | | no |
+| default / insolvency | 543 | -0.36% | 43% | -0.39 | | no |
+| rating downgrade | 70 | +0.04% | 43% | -0.13 | | no |
+| auditor resigned | 154 | -0.12% | 45% | -1.08 | | no |
+
+What it shows (for explaining news, not for trading):
+- Even the consistent effects are small averages with wide spreads: an order win beat the Nifty only 54% of the time;
+  the typical (median) acquisition did slightly worse than the Nifty. No type is close to a sure thing.
+- Good results are usually expected: annual profit up 20%+ did not beat the Nifty on average; losses and leadership
+  exits were the clearer negatives.
+- Buybacks, fund raising and even defaults show no reliable 5-session pattern after they are announced (much is
+  priced in earlier, or the events are too varied).
+
+Use (as pre-registered): the Reel quotes a type's average only when it is "consistent", always as "an average, not a
+prediction for any one company", and says "no reliable pattern" otherwise. No trading rule follows.
