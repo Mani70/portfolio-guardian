@@ -65,6 +65,10 @@ RESEARCH = [
     "Holding a bit less Nifty when the market's dividend yield was very low added about 0.9% a year in 2006-15, mostly around 2008.",
     "Stock tips from a price-only screen beat the Nifty in 2011-15 but not reliably in 2016-26 - no proven edge.",
     "Weak stocks near their 52-week low did exactly as well as the Nifty over the next month in our 15-year test.",
+    "In 14 years of NSE news, companies announcing a buyback did no better than the Nifty in the following week.",
+    "Annual profit up 20%+ sounds great, but in 14 years of NSE data those shares did not beat the Nifty the next week - good news is often already expected.",
+    "Even after an order win, the best-known 'good news', shares beat the Nifty only 54% of the time over the next week in our 14-year study.",
+    "We tested 256 short-term trading rules, chose the best on 2012-19 and tested it once on 2020-26. None passed.",
 ]
 
 
