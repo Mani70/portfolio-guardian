@@ -666,3 +666,31 @@ What this means: in 14 years of real NSE prices, none of the standard defined-ri
 the money in a liquid fund by a margin that is not chance, after costs. This matches SEBI's finding that most
 individual F&O traders lose. Outcome as pre-registered: the 4-week paper run goes ahead to check the mechanics (its
 report states these verdicts); no F&O with real money.
+
+## Addendum 21: one disciplined search for a short-term edge (10 Oct 2026; pre-registered; research/search21.py)
+
+256 rules, fixed in advance: 136 swing rules on the 100 most traded stocks (reversal, breakout, momentum, pullback,
+volume surge; holds of 1-20 sessions; with and without a market filter), 20 intraday rules (gap fades and follows,
+yesterday's losers and gainers), 100 Nifty option rules (put spreads and condors at 16 strike settings, held or closed
+at half profit, monthly and weekly, a trend filter; long straddles and strangles). Costs: 0.44% a delivery round trip,
+0.20% intraday, Addendum 20's option charges. Chosen on 2012-2019 only (t >= 3.5, profitable in 2012-15 and 2016-19),
+then tested once on 2020-2026.
+
+| family | qualified on 2012-19 | choice | test on 2020-26 |
+|---|---|---|---|
+| swing stocks (136) | 0 (best t 1.16: buy 2-day oversold stocks in an uptrend, hold 20 days) | none | - |
+| intraday stocks (20) | 12 | short stocks that open 1%+ above yesterday's close, cover at the close (t 7.44) | **FAIL**: +0.12% a trade after costs, t 1.81 (bar 2), worst fall -43% (bar -25%); 20% a year |
+| Nifty options (100) | 0 (best t 1.03: weekly iron condor 3%/6%) | none | - |
+
+**Verdict: no rule passes.** What the numbers say:
+- Swing rules on large stocks: nothing came close; momentum, breakouts and dip-buying all earn about their costs.
+- Intraday gap rules looked strong in 2012-2015 and faded steadily: fading 1%+ gap-ups made 0.54% a trade in
+  2012-15, 0.24% in 2016-19 and 0.12% in 2020-26; buying 3%+ gap-downs fell from 1.90% to 0.42%. Even the remaining
+  edge is doubtful: daily data assumes a fill at NSE's official opening price (the pre-open auction), and on real
+  5-minute prices (Jun 2024 - Oct 2026, FINDINGS "Intraday") fading gaps lost money. A -43% worst fall rules it out
+  for this account anyway.
+- Buying yesterday's biggest losers at the open lost 0.32% a trade (t -8): "buy the dip" intraday is costly.
+- Option selling, 100 ways: no setting earns more than its costs and tail losses (best t 1.03).
+
+Outcome as pre-registered: the short-term research ends here. The video says so plainly; the live money stays on the
+long-term rulebook.
