@@ -161,3 +161,11 @@ def test_universe_job_is_scheduled_and_known_to_health():
     assert "universe)" in (OCI / "job.sh").read_text()
     assert "$PG universe" in (OCI / "crontab").read_text()
     assert "universe" in _load("health").JOBS
+
+
+def test_autodeploy_waits_for_trading_jobs_but_not_for_reel_jobs():
+    ad = _load("autodeploy")
+    reel = "1234 /home/opc/portfolio-guardian/.venv/bin/python -m trader.run reel --slot breaking\n"
+    trade = "2345 /home/opc/portfolio-guardian/.venv/bin/python -m trader.run intraday\n"
+    assert not ad.trading_job_running(reel) and not ad.trading_job_running("")
+    assert ad.trading_job_running(reel + trade) and ad.trading_job_running("99 python -m guardian.main\n")

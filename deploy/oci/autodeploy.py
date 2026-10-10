@@ -39,9 +39,18 @@ def notify(text: str, dry_run: bool) -> None:
         print(f"(Telegram failed: {e})")
 
 
-def trading_job_running() -> bool:
-    r = sh("pgrep", "-f", "trader.run|guardian.main", check=False)
-    return bool(r.stdout.strip())
+CONTENT_JOBS = (" reel", " voices")                         # Reels place no orders: an update may run alongside
+
+
+def trading_job_running(listing: str = None) -> bool:
+    """A job that trades or plans trades is running (the Reel jobs, e.g. the every-minute breaking watch, do not count)."""
+    if listing is None:
+        listing = sh("pgrep", "-af", "trader.run|guardian.main", check=False).stdout
+    for line in listing.splitlines():
+        if ("trader.run" in line or "guardian.main" in line) and "pgrep" not in line \
+                and not any(f"trader.run{j}" in line for j in CONTENT_JOBS):
+            return True
+    return False
 
 
 def main(argv=None) -> int:
