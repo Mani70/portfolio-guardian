@@ -431,7 +431,10 @@ kept only with one official source or two different outlets among the pages actu
 moves are reported as market commentary; a company is named only with its news, never with a price or move of the
 last 30 days (SEBI's price-data rule for education). "What next" is only history from Addenda 22-23, as an average,
 or "no reliable pattern". The 21:30 evening Reel (NEWS SAMJHO) explains the day's top trusted news when there is one.
-The news search costs about $0.10-0.30 a day of Anthropic credit (8 searches + reading).
+The same daily Claude call also collects **why the market and its sectors moved, as reported** by those outlets,
+and **global cues** (US indices' last close, Asian markets, Brent crude, the rupee); each needs a trusted page the
+search retrieved, and every sentence passes a SEBI check in code (no forecast, instruction or promise; no company
+with a % or a price). It costs about $0.15-0.40 a day of Anthropic credit (up to 10 searches + reading).
 
 Built for watch time (research notes: `trader/reel/RESEARCH.md`): a hook in the first beat, 8-12 beats with a new
 picture every beat, word-by-word captions with the current word highlighted, a progress bar, big numbers, trimmed

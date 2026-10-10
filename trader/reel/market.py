@@ -173,15 +173,37 @@ class NewsItem(BaseModel):
     source_urls: List[str] = Field(description="URLs of the pages these facts come from (from the search results)")
 
 
+class Driver(BaseModel):
+    text: str = Field(description="Why an index or sector moved today, as reported - index/sector level, no company "
+                                  "named with a price or move, no forecast")
+    sector: Literal["IT", "Bank", "Pharma", "Auto", "FMCG", "Metal", "Realty", "Energy", "Oil & Gas", "Whole market",
+                    "Other"]
+    source_urls: List[str]
+
+
+class Cue(BaseModel):
+    what: str = Field(description="e.g. 'US S&P 500 (last close)', 'Brent crude', 'Rupee vs US dollar', 'Asian markets'")
+    value: str = Field(description="Level and/or change exactly as the source states it, with its date or time")
+    source_urls: List[str]
+
+
 class NewsList(BaseModel):
     items: List[NewsItem]
+    drivers: List[Driver] = Field(default_factory=list)
+    cues: List[Cue] = Field(default_factory=list)
 
 
-SEARCH_PROMPT = """Today is {day} (India). Find the 3-5 most important NEWS EVENTS of the last 24 hours for people who invest in Indian shares: government or regulator decisions (RBI, SEBI, Indian government, tax, budget), global events that concern Indian sectors (US Federal Reserve, US policy on visas, tariffs or trade, crude oil, global markets), and big corporate events of large Indian listed companies.
+SEARCH_PROMPT = """Today is {day} (India). Today's closing figures from NSE:
+{context}
 
-Use only what the search results say. For each event give the facts with their dates and the URLs of the pages you used. Prefer official sources (government, regulator, exchange) where they exist. Skip rumours, opinions, stock tips, price targets and predictions."""
+Research three things, using only the search results:
+1. The 3-5 most important NEWS EVENTS of the last 24 hours for people who invest in Indian shares: government or regulator decisions (RBI, SEBI, Indian government, tax, budget), global events that concern Indian sectors (US Federal Reserve, US policy on visas, tariffs or trade, crude oil), and big corporate events of large Indian listed companies.
+2. WHY the market and its biggest-moving sectors moved today, as reported by the outlets (the reasons they give).
+3. GLOBAL CUES: the last close of the main US indices, Asian markets today, Brent crude, and the rupee against the US dollar - with their dates.
 
-STRUCTURE_PROMPT = """Turn these research notes into a list of news items. Keep only events dated within the last 24 hours of {day}. Use only facts and URLs that appear in the notes; do not add anything. No forecasts, no price targets, no stock calls. If an item has no URL in the notes, leave it out.
+For each point give the facts with their dates and the URLs of the pages you used. Prefer official sources (government, regulator, exchange) where they exist. Skip rumours, opinions, stock tips, price targets and predictions."""
+
+STRUCTURE_PROMPT = """Turn these research notes into news items, drivers (why the market and sectors moved today, as reported) and global cues. Keep only things dated within the last 24 hours of {day}. Use only facts and URLs that appear in the notes; do not add anything. No forecasts, no price targets, no stock calls; in drivers, never name a company together with its share price or move. If something has no URL in the notes, leave it out.
 
 NOTES:
 {notes}"""
@@ -213,17 +235,34 @@ def trusted(items: List[NewsItem], retrieved: set) -> List[dict]:
     return out
 
 
-def web_news(day: date, client=None, max_searches: int = 8) -> tuple[List[dict], str]:
-    """(trusted items, note). Claude searches only the trusted sites; the trust rule is then applied in code."""
+def _sourced(x, retrieved: set) -> List[str]:
+    return [u for u in x.source_urls if u in retrieved and _matches(_domain(u), OFFICIAL + OUTLETS)]
+
+
+def safe_text(text: str, companies: List[str]) -> bool:
+    """SEBI rules on a sentence: no prediction, instruction or promise; no named company with a % or a price."""
+    from .script import COMMAND, PCT, PREDICT, PRICE, PROMISE
+    if any(rx.search(text) for rx in (PREDICT, COMMAND, PROMISE)) or re.search(
+            r"\b(will|may|could|likely to|expected to) (rise|fall|gain|drop|rally|recover|decline)", text, re.I):
+        return False
+    named = any(c and c.lower() in text.lower() for c in companies)
+    return not (named and (PCT.search(text) or PRICE.search(text)))
+
+
+def web_news(day: date, client=None, max_searches: int = 10, context: str = "") -> dict:
+    """{items, drivers, cues, note}. Claude searches only the trusted sites; the trust rule (items: one official
+    source or two outlets; drivers and cues: one trusted page) and the SEBI sentence check are applied in code."""
     import os
 
     import anthropic
+    empty = {"items": [], "drivers": [], "cues": []}
     if client is None and not os.getenv("ANTHROPIC_API_KEY"):
-        return [], "no ANTHROPIC_API_KEY"
+        return {**empty, "note": "no ANTHROPIC_API_KEY"}
     client = client or anthropic.Anthropic()
     tool = {"type": "web_search_20260209", "name": "web_search", "max_uses": max_searches,
             "allowed_domains": OFFICIAL + OUTLETS, "user_location": {"type": "approximate", "country": "IN"}}
-    messages = [{"role": "user", "content": SEARCH_PROMPT.format(day=day.strftime("%A %d %B %Y"))}]
+    messages = [{"role": "user", "content": SEARCH_PROMPT.format(day=day.strftime("%A %d %B %Y"),
+                                                                 context=context or "(not available)")}]
     retrieved, notes = set(), []
     try:
         for _ in range(4):                                                 # resume if the server pauses a long turn
@@ -239,18 +278,26 @@ def web_news(day: date, client=None, max_searches: int = 8) -> tuple[List[dict],
                 break
             messages = messages[:1] + [{"role": "assistant", "content": resp.content}]
         if not notes or not retrieved:
-            return [], "no news found"
+            return {**empty, "note": "no news found"}
         parsed = client.beta.messages.parse(
             model=MODEL, max_tokens=16000, output_format=NewsList, output_config={"effort": "low"},
             messages=[{"role": "user", "content": STRUCTURE_PROMPT.format(day=day.isoformat(),
                                                                           notes="\n".join(notes)[:60000])}],
             betas=["server-side-fallback-2026-07-01"], fallbacks="default")
-        items = parsed.parsed_output.items if parsed.parsed_output else []
+        out = parsed.parsed_output or NewsList(items=[])
     except anthropic.APIError as e:
         log.warning("news search failed: %s", e)
-        return [], f"news search failed ({type(e).__name__})"
-    kept = trusted(items, retrieved)
-    return kept[:3], f"{len(kept)} of {len(items)} items passed the trust rule"
+        return {**empty, "note": f"news search failed ({type(e).__name__})"}
+    kept = [k for k in trusted(out.items, retrieved)
+            if safe_text(f"{k['headline']} {k['facts']} {k['why_it_matters']}", [])][:3]
+    names = sorted({c for it in out.items for c in it.companies})
+    drivers = [{"text": d.text, "sector": d.sector, "source_urls": _sourced(d, retrieved)} for d in out.drivers
+               if _sourced(d, retrieved) and safe_text(d.text, names)][:4]
+    cues = [{"what": c.what, "value": c.value, "source_urls": _sourced(c, retrieved)} for c in out.cues
+            if _sourced(c, retrieved) and safe_text(f"{c.what} {c.value}", [])][:5]
+    note = (f"{len(kept)} of {len(out.items)} news items, {len(drivers)} of {len(out.drivers)} reasons and "
+            f"{len(cues)} of {len(out.cues)} global cues passed the trust and SEBI checks")
+    return {"items": kept, "drivers": drivers, "cues": cues, "note": note}
 
 
 # ---------------------------------------------------------------- the day
@@ -274,7 +321,11 @@ def compile_day(today: date, store: Path, holidays=(), client=None, get=None, se
     nifty = ix.get("NIFTY 50", {})
     from . import content
     filing = content.news_item(today, store)
-    news, note = (web_news(today, client) if search else ([], "search off"))
+    context = "; ".join(f"{BROAD.get(k, SECTORS.get(k, k))} {ix[k]['pct']:+.2f}%" for k in list(BROAD) + list(SECTORS)
+                        if k in ix and ix[k]["pct"] is not None)
+    web = web_news(today, client, context=context) if search else {"items": [], "drivers": [], "cues": [],
+                                                                   "note": "search off"}
+    news, note = web["items"], web["note"]
     # history: Nifty 50, plus the sector each news item concerns, plus the day's biggest sector move
     hist = [history_line("NIFTY 50", nifty.get("pct"))]
     picks = {k for (_, _, k) in (sectors[:1] + sectors[-1:])}
@@ -287,7 +338,7 @@ def compile_day(today: date, store: Path, holidays=(), client=None, get=None, se
            "breadth": (n500.get("adv"), n500.get("dec")), "vix": (vix.get("close"), vix.get("pct")),
            "fii": snap["fii"], "dii": snap["dii"], "pe": nifty.get("pe"), "dy": nifty.get("dy"),
            "nifty_30d": nifty.get("pct30"), "nifty_1y": nifty.get("pct365"),
-           "news": news, "news_note": note, "filing": filing, "history": [h for h in hist if h],
+           "news": news, "news_note": note, "drivers": web["drivers"], "cues": web["cues"], "filing": filing, "history": [h for h in hist if h],
            "next_session": next_session(today, holidays).isoformat(),
            "calendar": calendar(get, next_session(today, holidays), store)}
     for it in news:                                                        # the sector's own move today, as context
@@ -328,6 +379,14 @@ def brief(day: dict) -> str:
     if s:
         lines += ["", "SECTORS", "• Best: " + ", ".join(f"{n} {_pct(p)}" for n, p in s[::-1][:3]),
                   "• Worst: " + ", ".join(f"{n} {_pct(p)}" for n, p in s[:3])]
+    if day.get("drivers"):
+        lines += ["", "WHY IT MOVED (as reported)"]
+        for d in day["drivers"]:
+            lines.append(f"• {d['text']} ({', '.join(sorted({_domain(u) for u in d['source_urls']}))})")
+    if day.get("cues"):
+        lines += ["", "GLOBAL CUES"]
+        for c in day["cues"]:
+            lines.append(f"• {c['what']}: {c['value']} ({_domain(c['source_urls'][0])})")
     lines += ["", "NEWS (trusted sources only)"]
     if not day["news"] and not day["filing"]:
         lines.append(f"• Nothing passed the trust rule today ({day['news_note']}).")

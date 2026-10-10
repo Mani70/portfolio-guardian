@@ -66,7 +66,7 @@ def test_compile_day_and_brief(tmp_path, monkeypatch):
     assert "Nifty 50: 22,520.45 (+1.30%)" in text and "sold ₹3,569 crore net" in text and "IT +3.02%" in text
     assert market.parts("a" * 3000 + "\n\n" + "b" * 3000) == ["a" * 3000, "b" * 3000]
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    assert market.web_news(DAY) == ([], "no ANTHROPIC_API_KEY")
+    assert market.web_news(DAY)["note"] == "no ANTHROPIC_API_KEY"
     stale = dict(FAKE, allIndices=dict(FAKE["allIndices"], timestamp="08-Oct-2026 15:30"))
     _patch_nse(monkeypatch, stale)
     assert market.compile_day(DAY, tmp_path, search=False) is None                    # NSE not updated yet
@@ -94,17 +94,29 @@ class FakeSearchClient:
                                  companies=["Infosys", "TCS"], source_urls=["https://www.dol.gov/newsroom/perm"]),
                  market.NewsItem(headline="rumour", facts="x", why_it_matters="y", sector="Other", companies=[],
                                  source_urls=["https://www.reuters.com/x"])]
-        return SimpleNamespace(parsed_output=market.NewsList(items=items))
+        drivers = [market.Driver(text="IT index rose as the rupee weakened, reports said", sector="IT",
+                                 source_urls=["https://www.reuters.com/x"]),
+                   market.Driver(text="Infosys rose 4% after the news", sector="IT",           # company + move: dropped
+                                 source_urls=["https://www.reuters.com/x"]),
+                   market.Driver(text="Banks will rally tomorrow", sector="Bank",               # forecast: dropped
+                                 source_urls=["https://www.reuters.com/x"]),
+                   market.Driver(text="Metals fell on China data", sector="Metal",            # not retrieved: dropped
+                                 source_urls=["https://www.reuters.com/never"])]
+        cues = [market.Cue(what="Brent crude", value="$61.2 a barrel on 9 Oct", source_urls=["https://www.reuters.com/x"])]
+        return SimpleNamespace(parsed_output=market.NewsList(items=items, drivers=drivers, cues=cues))
 
 
 def test_web_news_searches_only_trusted_sites_resumes_a_paused_turn_and_applies_the_rule():
     c = FakeSearchClient()
-    items, note = market.web_news(DAY, c)
+    web = market.web_news(DAY, c, context="Nifty 50 +1.30%; IT +3.02%")
+    items, note = web["items"], web["note"]
     tool = c.calls[0]["tools"][0]
     assert tool["type"] == "web_search_20260209" and "dol.gov" in tool["allowed_domains"]
     assert c.calls[0]["model"] == "claude-opus-5-5" and c.calls[0]["fallbacks"] == "default"
     assert len(c.calls) == 3 and c.calls[1]["messages"][1]["role"] == "assistant"    # resumed after pause_turn
-    assert [i["headline"][:7] for i in items] == ["US susp"] and note == "1 of 2 items passed the trust rule"
+    assert [i["headline"][:7] for i in items] == ["US susp"] and "IT +3.02%" in c.calls[0]["messages"][0]["content"]
+    assert [d["text"][:8] for d in web["drivers"]] == ["IT index"] and web["cues"][0]["what"] == "Brent crude"
+    assert note.startswith("1 of 2 news items, 1 of 4 reasons and 1 of 1 global cues passed")
 
 
 def test_market_slot_sends_the_brief_and_a_reel_and_the_evening_explains_the_top_news(tmp_path, monkeypatch):
@@ -113,12 +125,15 @@ def test_market_slot_sends_the_brief_and_a_reel_and_the_evening_explains_the_top
     _patch_nse(monkeypatch)
     news = [{"headline": "US suspends PERM filings", "facts": "f", "why_it_matters": "w", "sector": "IT",
              "companies": ["Infosys"], "source_urls": ["https://www.dol.gov/x"], "official": True}]
-    monkeypatch.setattr(market, "web_news", lambda d, c=None, max_searches=8: (news, "1 of 1"))
+    monkeypatch.setattr(market, "web_news", lambda d, c=None, max_searches=10, context="": {
+        "items": news, "note": "ok", "cues": [{"what": "Brent crude", "value": "$61", "source_urls": ["https://reuters.com/x"]}],
+        "drivers": [{"text": "IT rose as the rupee fell", "sector": "IT", "source_urls": ["https://reuters.com/x"]}]})
     said, videos = [], []
     msg = job.run(said.append, lambda p, c: videos.append(p) or True, today=DAY, out_dir=tmp_path,
                   store=tmp_path / "none", slot="market")
     assert msg.startswith("reel (market): sent market") and videos
     assert said[0].startswith("📊 DAILY MARKET BRIEF") and "US suspends PERM filings [official source]" in said[0]
+    assert "WHY IT MOVED (as reported)" in said[0] and "Brent crude: $61 (reuters.com)" in said[0]
     assert "MARKET AAJ  •  EP 1" in said[1]
     saved = json.loads((tmp_path / "market_20261009.json").read_text())
     assert saved["news"][0]["sector_today"] == 3.02

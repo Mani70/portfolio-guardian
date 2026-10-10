@@ -51,6 +51,8 @@ def market_facts(day: dict) -> dict:
     if f:
         sheet.append(f"NSE FILING: {f['symbol']} - {f['subject']}." + (f" History for this type: {f['history']}"
                                                                         if f.get("history") else ""))
+    sheet += [f"WHY IT MOVED (as reported by trusted outlets): {d['text']}" for d in day.get("drivers", [])]
+    sheet += [f"GLOBAL CUE: {c['what']}: {c['value']}" for c in day.get("cues", [])]
     sheet += [f"HISTORY: {h}" for h in day["history"]]
     if day["calendar"]:
         sheet.append("NEXT SESSION: " + "; ".join(day["calendar"]))

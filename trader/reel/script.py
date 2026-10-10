@@ -164,6 +164,7 @@ MARKET_RULES = """This is the weekday MARKET AAJ wrap (60-75 seconds, 10-14 beat
 - A company may be named only with its news - NEVER with its share price or its % move (SEBI rule). Keep company names out of any beat that has a % number.
 - "What next" may only be the HISTORY lines given (always "an average, not a prediction") or "history shows no reliable pattern". Never say what will happen tomorrow.
 - Explain FII/DII, VIX and any term the first time it appears, in plain words.
+- "Why it moved" may only use the WHY IT MOVED lines (say "reports ke mutabik"); global cues only from GLOBAL CUE lines.
 - Hook: the single most striking fact of the day (a big move, a big news) - no greeting."""
 
 
