@@ -405,6 +405,14 @@ Tested over 2011-2026 (`research/insights20.py`, FINDINGS Addendum 15): BUY idea
 2011-15 but not reliably in 2016-26, and AVOID ideas did no worse than the Nifty, so neither list is a proven signal
 (the report says so). The rules are not re-tuned to that result.
 
+### F&O practice run (paper only - never an order)
+`trader.run fo-paper` (weekdays 20:15, again 22:45 if NSE's F&O file was late; reports once a day) practises Nifty
+option strategies on paper for 4 weeks with NSE's real closing prices: bull put spreads and iron condors (monthly and
+weekly), crash insurance and trend option buying, all with defined risk (research/PREREGISTRATION.md Addenda 20/20a).
+Each evening one plain-language Telegram message says what is open, what it would be worth if closed today, the most
+each position can lose, and the running total. The verdict comes from the 14-year test (`research/fo20.py`), not
+from the paper weeks; state in `trader/state/fo_paper.json`.
+
 # Phase 6: Running on an OCI server (Oracle Linux 9)
 
 Files in `deploy/oci/`:

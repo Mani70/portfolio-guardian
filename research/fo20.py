@@ -87,30 +87,40 @@ def sessions(start: date, end: date) -> List[date]:
     return [d for d in out if start <= d <= end]
 
 
-def download(start: date = date(2012, 1, 1), end: Optional[date] = None) -> None:
+def download(start: date = date(2012, 1, 1), end: Optional[date] = None, workers: int = 4) -> None:
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
     import download_nse as DN
     FO.mkdir(parents=True, exist_ok=True)
     out = FO / "nifty_fo.csv"
     have = set(pd.read_csv(out, usecols=["date"])["date"].unique()) if out.exists() else set()
     missing_p = FO / "missing.txt"
     missing = set(missing_p.read_text().split()) if missing_p.exists() else set()
-    f = DN.Fetcher(0.3)
     days = [d for d in sessions(start, end or date.today()) if d.isoformat() not in have and d.isoformat() not in missing]
     print(f"{len(have)} days stored, {len(days)} to fetch", flush=True)
-    for k, d in enumerate(days):
+    lock, local, n = threading.Lock(), threading.local(), [0]
+
+    def job(d: date) -> None:
+        if not hasattr(local, "f"):
+            local.f = DN.Fetcher(0.2)
         rows = None
         for u in urls(d):
-            blob = f.get(u)
+            blob = local.f.get(u)
             if blob:
                 rows = parse(DN.unzip_csv(blob), d)
                 break
-        if rows:
-            pd.DataFrame(rows, columns=COLS).to_csv(out, mode="a", header=not out.exists(), index=False)
-        elif d < date.today() - timedelta(days=3):
-            with missing_p.open("a") as fh:
-                fh.write(d.isoformat() + "\n")
-        if k % 100 == 0:
-            print(f"  {k}/{len(days)} {d}", flush=True)
+        with lock:
+            if rows:
+                pd.DataFrame(rows, columns=COLS).to_csv(out, mode="a", header=not out.exists(), index=False)
+            elif d < date.today() - timedelta(days=3):
+                with missing_p.open("a") as fh:
+                    fh.write(d.isoformat() + "\n")
+            n[0] += 1
+            if n[0] % 100 == 0:
+                print(f"  {n[0]}/{len(days)}", flush=True)
+
+    with ThreadPoolExecutor(workers) as ex:
+        list(ex.map(job, days))
     print("done", flush=True)
 
 
