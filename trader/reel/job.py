@@ -19,7 +19,7 @@ log = logging.getLogger("trader.reel")
 
 
 def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = None, handle: str = "",
-         voice_model: Optional[str] = None) -> dict:
+         voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman") -> dict:
     facts = {"date": today.isoformat(), "lesson": content.pick(content.LESSONS, today),
              "research": content.pick(content.RESEARCH, today), "news": content.news_item(today, store)}
     sc, source = S.write(facts, client)
@@ -28,9 +28,13 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
         shutil.rmtree(work)
     work.mkdir(parents=True)
     scenes, voices = [], set()
-    items = [(s.kind, s.on_screen, s.narration) for s in sc.scenes] + [("disclaimer", "Education only", S.DISCLAIMER)]
-    for i, (kind, on_screen, narration) in enumerate(items):
-        audio, vsrc = voice.speak(narration, work / f"a{i:02d}.mp3", model=voice_model)
+    deva = speak == "devanagari"                  # the voice reads Hindi words in Devanagari; captions stay Roman
+    items = [(s.kind, s.on_screen, s.narration, (s.spoken if deva else "") or s.narration) for s in sc.scenes]
+    items.append(("disclaimer", "Education only", S.DISCLAIMER, S.DISCLAIMER_SPOKEN if deva else S.DISCLAIMER))
+    said = [x[3] for x in items]
+    for i, (kind, on_screen, narration, text) in enumerate(items):
+        audio, vsrc = voice.speak(text, work / f"a{i:02d}.mp3", voice=voice_id, model=voice_model,
+                                  prev=said[i - 1] if i else None, nxt=said[i + 1] if i + 1 < len(said) else None)
         voices.add(vsrc)
         scenes.append((kind, on_screen, narration, audio))
     video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}.mp4", work, handle)
@@ -43,13 +47,13 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
 
 
 def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, store=None,
-        handle: str = "", voice_model: Optional[str] = None) -> str:
+        handle: str = "", voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman") -> str:
     today = today or date.today()
     state_p = out_dir / "state.json"
     st = json.loads(state_p.read_text()) if state_p.exists() else {}
     if st.get("sent") == today.isoformat():
         return "reel: already sent today"
-    r = make(today, out_dir, client, store, handle, voice_model)
+    r = make(today, out_dir, client, store, handle, voice_model, voice_id, speak)
     ok = send_video(r["video"], f"🎬 Today's Reel ({today:%a %d %b}) - review before posting")
     notes = [f"📝 Instagram caption (copy-paste):\n\n{r['caption']}",
              "Before you post: watch it once; check the news source link on nseindia.com if a company is named.\n"

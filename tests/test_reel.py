@@ -60,3 +60,85 @@ def test_full_reel_without_keys_builds_a_video_and_says_why(tmp_path, monkeypatc
     assert msg.startswith("reel: sent") and videos and videos[0].stat().st_size > 10_000
     assert "Education only - not investment advice" in said[0] and "Voice: silence (no ElevenLabs key)" in said[1]
     assert job.run(said.append, lambda p, c: True, today=date(2026, 10, 12), out_dir=tmp_path) == "reel: already sent today"
+
+
+def test_voice_text_is_kept_only_when_it_says_what_the_narration_says():
+    sc = _script("TCS ne buyback announce kiya, 10 crore ka.")
+    sc.scenes[0].spoken = "क्या आप जानते हो?"
+    sc.scenes[2].spoken = "TCS ने buyback announce किया, 10 करोड़ का।"
+    assert S.vet_spoken(sc, ["TCS"]) == [] and sc.scenes[2].spoken
+    sc.scenes[2].spoken = "TCS के शेयर ख़रीदो, 10 करोड़ का।"                  # a call the Roman text did not make
+    sc.scenes[0].spoken = "क्या आप जानते हो? 50 साल।"                          # a number the Roman text does not have
+    dropped = " | ".join(S.vet_spoken(sc, ["TCS"]))
+    assert "instruction to trade" in dropped and "numbers differ" in dropped
+    assert sc.scenes[0].spoken == "" and sc.scenes[2].spoken == ""          # those scenes are voiced from the narration
+
+
+def test_devanagari_mode_voices_the_spoken_text_with_neighbouring_scenes(tmp_path, monkeypatch):
+    from trader.reel import voice
+    sc = _script("TCS ne buyback announce kiya.")
+    sc.scenes[1].spoken = "Rebalancing में जो fund ज़्यादा बढ़ गया"
+    monkeypatch.setattr(S, "write", lambda facts, client=None: (sc, "claude"))
+    calls = []
+
+    def fake_speak(text, path, key=None, voice=None, model=None, prev=None, nxt=None):
+        calls.append((text, voice, model, prev, nxt))
+        return real_silence(path, 1.0), "elevenlabs"
+    real_silence = voice.silence
+    monkeypatch.setattr(voice, "speak", fake_speak)
+    job.make(date(2026, 10, 12), tmp_path, store=tmp_path / "none", voice_model="eleven_v3", voice_id="V1",
+             speak="devanagari")
+    texts = [c[0] for c in calls]
+    assert texts[1] == "Rebalancing में जो fund ज़्यादा बढ़ गया" and texts[0] == "Kya aap jaante ho?"   # no spoken: Roman
+    assert texts[-1] == S.DISCLAIMER_SPOKEN and calls[1][1:3] == ("V1", "eleven_v3")
+    assert calls[1][3] == texts[0] and calls[1][4] == texts[2]
+
+
+def test_voice_request_fits_the_model_and_retries_plain_on_a_rejected_setting(tmp_path, monkeypatch):
+    from trader.reel import voice
+    assert voice.payload("x", "eleven_v3", "a", "b") == {"text": "x", "model_id": "eleven_v3",
+                                                         "voice_settings": {"stability": 0.5}}
+    assert voice.payload("x", "eleven_multilingual_v2", "a", "b")["previous_text"] == "a"
+    sent = []
+
+    def post(url, headers, json, timeout):
+        sent.append(json)
+        return SimpleNamespace(status_code=400 if len(sent) == 1 else 200, content=b"mp3", text="bad setting")
+    monkeypatch.setattr(voice.requests, "post", post)
+    f, src = voice.speak("namaste", tmp_path / "a.mp3", key="k", voice="v", model="eleven_multilingual_v2", prev="p")
+    assert src == "elevenlabs" and sent[1] == {"text": "namaste", "model_id": "eleven_multilingual_v2"}
+
+
+def test_voice_audition_sends_each_voice_and_the_four_way_comparison(tmp_path, monkeypatch):
+    from trader.reel import audition, voice
+    monkeypatch.setattr(voice, "my_voices", lambda key: [{"voice_id": "MINE", "name": "Mine", "about": "",
+                                                          "preview": None, "mine": True}])
+    monkeypatch.setattr(voice, "library_voices", lambda key, lang, n: [
+        {"voice_id": "LIB1", "name": "Lib", "about": "female, young", "preview": "https://x/p.mp3", "mine": False},
+        {"voice_id": "MINE", "name": "Mine", "about": "", "preview": None, "mine": False}])
+    ok = {"MINE"}
+    monkeypatch.setattr(voice, "speak", lambda text, path, key=None, voice=None, model=None, **kw:
+                        (path, "elevenlabs" if voice in ok else "silence (ElevenLabs error 404)"))
+    said, clips = [], []
+    msg = audition.run(said.append, lambda p, c, title="": clips.append((p, c)) or True, key="k", out=tmp_path)
+    assert msg == "voices: 2 sent" and len(clips) == 2
+    assert clips[1][0] == "https://x/p.mp3" and "ElevenLabs' own sample" in clips[1][1]       # library voice preview
+    assert "MINE" in said[-1] and "LIB1" in said[-1]
+    clips.clear()
+    ok.add("LIB1")
+    assert audition.run(said.append, lambda p, c, title="": clips.append(c) or True, voice_id="LIB1", key="k",
+                        out=tmp_path) == "voices: 4 of 4 clips sent"
+    assert "voice_model: eleven_v3\n  speak: devanagari" in clips[3]
+
+
+def test_voice_audition_reports_a_refused_list_instead_of_crashing(tmp_path, monkeypatch):
+    import requests
+    from trader.reel import audition, voice
+
+    def refused(*a):
+        raise requests.HTTPError(response=SimpleNamespace(status_code=401))
+    monkeypatch.setattr(voice, "my_voices", refused)
+    monkeypatch.setattr(voice, "library_voices", refused)
+    said = []
+    assert audition.run(said.append, lambda *a, **k: True, key="k", out=tmp_path) == "voices: no voices to test"
+    assert "HTTP 401" in said[0] and "Voices: Read" in said[0]

@@ -43,6 +43,26 @@ class Notifier:
         except requests.RequestException as e:
             log.error("Telegram send failed: %s", e)
 
+    def send_audio(self, path, caption: str = "", title: str = "") -> bool:
+        """An audio clip to the Telegram chat: a local file, or an https URL Telegram fetches itself."""
+        print(f"[audio] {path}\n{caption}")
+        if self.dry_run or not (self.tg_token and self.tg_chat):
+            return False
+        data = {"chat_id": self.tg_chat, "caption": caption[:1000], "title": title[:60]}
+        url = f"https://api.telegram.org/bot{self.tg_token}/sendAudio"
+        try:
+            if str(path).startswith("https://"):
+                r = requests.post(url, data={**data, "audio": str(path)}, timeout=120)
+            else:
+                with open(path, "rb") as fh:
+                    r = requests.post(url, data=data, files={"audio": fh}, timeout=120)
+            if r.status_code != 200:
+                log.error("Telegram audio failed: HTTP %s %s", r.status_code, r.text[:200])
+            return r.status_code == 200
+        except (OSError, requests.RequestException) as e:
+            log.error("Telegram audio failed: %s", e)
+            return False
+
     def send_video(self, path, caption: str = "") -> bool:
         """A video file (e.g. the daily Reel) to the Telegram chat. True if Telegram accepted it."""
         print(f"[video] {path}\n{caption}")
