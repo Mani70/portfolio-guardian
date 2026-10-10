@@ -233,3 +233,16 @@ def test_every_format_has_a_working_fallback_template():
     for c in cases:
         sc = S.template({**base, **c})
         assert sc.scenes[-1].kind == "question", c["format"]
+
+
+def test_old_videos_and_cards_are_cleaned_up(tmp_path):
+    import os
+    import time
+    old, new = tmp_path / "reel_20260901_morning.mp4", tmp_path / "reel_20261010_morning.mp4"
+    card = tmp_path / "story_101010_ABHI.png"
+    for f in (old, new, card):
+        f.write_bytes(b"x")
+    past = time.time() - 20 * 86400
+    os.utime(old, (past, past))
+    os.utime(card, (past, past))
+    assert job.cleanup(tmp_path, date(2026, 10, 11)) == 2 and new.exists() and not old.exists()
