@@ -57,6 +57,9 @@ class Context(BaseModel):
 class Breaking(BaseModel):
     material: bool = Field(description="True only if this could matter to many investors (a big number, a policy "
                                        "change, a leadership exit, a default, a large deal) - routine filings are False")
+    importance: Literal["major", "notable", "minor"] = Field(
+        default="notable", description="major = a big surprise or market-wide effect (a top company's results, a policy "
+                                       "rate change, a big default or exit, a ban); notable = worth knowing; minor")
     headline: str
     points: List[Point] = Field(description="3-6 facts from the document; for results: revenue, profit and their "
                                             "change from a year earlier, reasons given, dividend")
@@ -215,7 +218,8 @@ def read(c: dict, client=None, fast: bool = True) -> Optional[dict]:
         return None
     ctx = [{"text": x.text, "source_urls": market._sourced(x, retrieved)} for x in b.context]
     ctx = [x for x in ctx if x["source_urls"] and not share_talk(x["text"]) and market.safe_text(x["text"], b.companies)]
-    return {"material": b.material, "headline": b.headline, "points": pts, "why_it_matters": b.why_it_matters,
+    return {"material": b.material, "importance": b.importance, "headline": b.headline, "points": pts,
+            "why_it_matters": b.why_it_matters,
             "sector": b.sector, "companies": b.companies, "url": c["url"], "source": c["source"], "context": ctx[:3]}
 
 
@@ -333,11 +337,16 @@ def watch(state: dict, now: datetime, get, size: dict, feeds: dict, max_per_day:
                 on_pick(c)
             got = read(c, client)
             if got and got["material"]:
+                major = got.get("importance", "major") == "major"
                 covered.append({"date": today, "kind": c["kind"], "company": c["company"], "time": c.get("time"),
                                 **{k: got.get(k) for k in ("headline", "points", "why_it_matters", "sector", "url",
-                                                           "source")}, "context": got.get("context") or []})
+                                                           "source")}, "context": got.get("context") or [],
+                                "importance": got.get("importance", "major")})
                 if on_read:
                     on_read(c, got)
+                if not major:                                              # feed Reels only for major news
+                    alerts.append(f"📲 Story-worthy (in tonight's report): {got['headline']}\n{c['url']}")
+                    continue
                 chosen = facts(c, got, state.get("episode", 0) + 1)
                 chosen["published"] = c.get("time") or ""
                 made.append(now.isoformat(timespec="minutes"))
@@ -435,8 +444,11 @@ def run(notify, send_video, make, now: Optional[datetime] = None, out_dir: Optio
     took = (datetime.now() - started).seconds
     ok = send_video(r["video"], f"🚨 BREAKING SAMJHO - post now (source published {chosen.get('published') or '?'}; "
                                 f"Reel ready in {took // 60}m{took % 60:02d}s)")
+    if send_photo and r.get("cover"):
+        send_photo(r["cover"], "🖼️ Cover for this Reel")
     notify(f"📝 Caption (copy-paste):\n\n{r['caption']}")
-    notify("Breaking Reel: watch it once, open the source link, then post. "
+    notify((r.get("checklist", "") + "\n" if r.get("checklist") else "") +
+           "Breaking Reel: watch it once, open the source link, then post. "
            f"Script: {r['script_source']}. Voice: {r['voice']}." + ("" if ok else f" Video on the server: {r['video']}"))
     for a in alerts[1:5]:
         notify(a)

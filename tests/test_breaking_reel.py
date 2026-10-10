@@ -166,3 +166,13 @@ def test_night_report_gathers_the_day_with_sources_and_reads_what_was_only_alert
     assert f["format"] == "night" and "STORY 1 (results)" in f["night_text"] and "RAAT KI REPORT" in S._brief(f)
     one = night.single({**b, "stories": b["stories"][:1]})
     assert one["results"]["company"] == "HCL Technologies"
+
+
+def test_only_major_news_becomes_a_feed_reel_notable_goes_to_stories_and_the_night(monkeypatch):
+    monkeypatch.setattr(breaking, "read", lambda c, client=None: {
+        "material": True, "importance": "notable", "headline": "HCL: small update", "sector": "IT",
+        "companies": ["HCL"], "points": ["a", "b"], "why_it_matters": "w", "url": c["url"], "source": c["source"],
+        "context": []})
+    chosen, alerts, st = breaking.watch({"seen": ["nse:4"]}, NOW, get, SIZE, {})
+    assert chosen is None and any("Story-worthy" in a for a in alerts)
+    assert st["covered"][-1]["importance"] == "notable"                       # it will be in RAAT KI REPORT

@@ -61,7 +61,9 @@ class Scene(BaseModel):
 class ReelScript(BaseModel):
     title: str
     scenes: List[Scene] = Field(description="The beats, in order")
-    caption: str = Field(description="Instagram caption, 2-4 short lines, Hinglish, no advice, ending with the comment question")
+    caption: str = Field(description="Instagram caption, 3-5 short lines, Hinglish, no advice: line 1 is a hook (the "
+                                     "most surprising fact), then the comment question, then a share line naming who "
+                                     "would find it useful ('📤 Bhejo us dost ko jo ...'), then '🔖 Save karo'")
     hashtags: List[str]
 
 
@@ -364,6 +366,7 @@ def template(facts: dict) -> ReelScript:
         beats.append(Scene(kind="question", narration="Aapka kya experience hai? Comment mein batao." + nxt,
                            on_screen="Comment mein batao"))
     title = SERIES[f]
-    return ReelScript(title=title, scenes=beats, caption=f"{title} | aaj ka market lesson\n{beats[-1].narration}",
+    return ReelScript(title=title, scenes=beats, caption=f"{title} | aaj ka market lesson\n{beats[-1].narration}\n"
+                      "📤 Bhejo us dost ko jo market seekhna chahta hai\n🔖 Save karo",
                       hashtags=["stockmarketindia", "investing", "nifty50", "financialeducation",
                                                       "hinglish"])

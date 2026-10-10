@@ -17,7 +17,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
-from . import company, content, market, night, numbers, render, script as S, voice
+from . import company, content, engage, market, night, numbers, render, script as S, voice
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "cache" / "reel"
@@ -175,13 +175,17 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
                                                      for u in x["source_urls"]}))
     if facts.get("macro"):
         caption += "\n\nSources: " + ", ".join(sorted({market._domain(u) for u in facts["macro"]["source_urls"]}))
+    series = facts.get("series") or S.SERIES[facts["format"]]
+    cover = render.cover(series, facts["episode"], sc.scenes[0].on_screen or sc.title, work / "cover.png", handle)
     return {"video": video, "caption": caption, "script": sc, "script_source": source, "format": facts["format"],
-            "voice": ", ".join(sorted(voices)), "news": facts.get("news"), "question": sc.scenes[-1].narration}
+            "voice": ", ".join(sorted(voices)), "news": facts.get("news"), "question": sc.scenes[-1].narration,
+            "cover": cover, "series": series, "checklist": engage.checklist(series, sc.scenes[-1].narration, cover)}
 
 
 def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, store=None,
         handle: str = "", voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
-        force: bool = False, slot: str = "morning", topic: str = "", holidays=(), search: bool = True) -> str:
+        force: bool = False, slot: str = "morning", topic: str = "", holidays=(), search: bool = True,
+        send_photo=None, send_album=None) -> str:
     today = today or date.today()
     state_p = out_dir / "state.json"
     st = json.loads(state_p.read_text()) if state_p.exists() else {}
@@ -214,15 +218,27 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
         for part in market.parts(market.brief(day)):
             notify(part)
     r = make(today, out_dir, client, store, handle, voice_model, voice_id, speak, slot, episodes, topic, day)
-    ok = send_video(r["video"], f"🎬 {slot.title()} Reel ({today:%a %d %b}) - review before posting")
+    ok = send_video(r["video"], f"🎬 {r['series']} Reel ({today:%a %d %b}) - review before posting")
+    if send_photo:
+        send_photo(r["cover"], f"🖼️ Cover for this Reel ({r['series']})")
     notes = [f"📝 Instagram caption (copy-paste):\n\n{r['caption']}",
-             "Before you post: watch it once; check the news source on nseindia.com if a company is named.\n"
-             f"After posting, pin a comment with the question so people answer: \"{r['question']}\"\n"
+             r["checklist"] + "\nBefore you post: watch it once; open the source link if a company is named.\n"
              f"Script: {r['script_source']}. Voice: {r['voice']}."]
     if not ok:
         notes.insert(0, f"The video could not be sent on Telegram; it is on the server at {r['video']}")
     for n in notes:
         notify(n)
+    if slot == "market" and day is not None:                               # the daily carousel + the Story poll
+        try:
+            slides = engage.carousel(day, out_dir, handle)
+            if send_album:
+                send_album(slides, "🗂️ CAROUSEL post - 'Aaj ka market' (post as one carousel; caption: the brief's "
+                                   "first lines + 'Save karo, dost ko bhejo')")
+            if send_photo:
+                send_photo(engage.poll_card(day["next_session"], out_dir),
+                           "📊 STORY: post this and add Instagram's POLL sticker (UP / DOWN)")
+        except Exception as e:                                             # noqa: BLE001 - extras never block the Reel
+            log.warning("carousel/poll: %s", e)
     out_dir.mkdir(parents=True, exist_ok=True)
     episodes[r["format"]] = episodes.get(r["format"], 0) + 1
     st.update({"sent_" + slot: today.isoformat(), "episodes": episodes, "video_" + slot: str(r["video"])})

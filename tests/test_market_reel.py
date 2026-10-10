@@ -228,3 +228,19 @@ def test_results_day_brief_and_the_evening_explains_the_biggest_result(tmp_path,
     f = job.facts_for(DAY, "evening", {}, tmp_path / "none", out_dir=tmp_path)
     assert f["format"] == "news" and f["results"]["company"] == "Tata Consultancy Services"
     assert "RESULTS SAMJHO" in S._brief(f)
+
+
+def test_market_slot_also_sends_a_cover_a_carousel_and_a_story_poll(tmp_path, monkeypatch):
+    from PIL import Image
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    _patch_nse(monkeypatch)
+    monkeypatch.setattr(market, "web_news", lambda d, c=None, max_searches=10, context="", results_for=(): {
+        "items": [], "drivers": [], "cues": [], "results": [], "note": "ok"})
+    photos, albums, said = [], [], []
+    job.run(said.append, lambda p, c: True, today=DAY, out_dir=tmp_path, store=tmp_path / "none", slot="market",
+            send_photo=lambda p, c: photos.append((p, c)), send_album=lambda ps, c: albums.append(ps))
+    assert photos[0][1].startswith("🖼️ Cover") and Image.open(photos[0][0]).size == (1080, 1920)
+    assert "POLL sticker" in photos[1][1] and len(albums[0]) >= 4
+    assert all(Image.open(p).size == (1080, 1350) for p in albums[0])         # Instagram 4:5 carousel
+    assert "Music: search 'news / corporate'" in said[-1] and "comment and pin" in said[-1]

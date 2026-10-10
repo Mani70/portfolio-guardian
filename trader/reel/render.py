@@ -202,3 +202,63 @@ def story_card(headline: str, lines: List[str], source: str, out: Path, label: s
     _centered(d, ["Source: " + source, FOOTER], font(32, bold=False), 1700, (220, 220, 220), gap=12)
     img.save(out)
     return out
+
+
+SERIES_COLOURS = {"MYTH vs SACH": ((70, 14, 30), (150, 40, 50)), "MARKET AAJ": ((8, 30, 60), (20, 80, 140)),
+                  "RAAT KI REPORT": ((15, 15, 45), (60, 30, 110)), "NEWS SAMJHO": ((12, 30, 40), (30, 90, 60)),
+                  "MARKET KI KAHANI": ((25, 18, 40), (90, 50, 110)), "COMPANY KI KUNDLI": ((40, 30, 10), (130, 90, 20)),
+                  "BREAKING SAMJHO": ((90, 10, 20), (20, 20, 40)), "ZAROORI KHABAR": ((90, 10, 20), (20, 20, 40))}
+
+
+def cover(series: str, episode: int, hook: str, out: Path, handle: str = "") -> Path:
+    """The Reel's cover for the profile grid: the series in its colour, the episode, the hook in big letters. The
+    middle third carries the text, so Instagram's square grid crop shows it."""
+    top, bottom = SERIES_COLOURS.get(series, ((18, 24, 64), (88, 28, 135)))
+    img = _gradient(top, bottom).copy()
+    d = ImageDraw.Draw(img)
+    lf = font(48)
+    lw = d.textlength(series, font=lf)
+    d.rounded_rectangle([(W - lw) / 2 - 36, 520, (W + lw) / 2 + 36, 616], radius=48, fill=YELLOW)
+    d.text(((W - lw) / 2, 538), series, font=lf, fill=(20, 20, 20))
+    lines, f = _big(hook)
+    if f.size > 120:                                                      # a bare number: keep it, smaller
+        f = font(180)
+    y = _centered(d, lines, f, 700, WHITE, gap=24)
+    _centered(d, [f"EP {episode}"], font(44), max(y + 30, 1250), (240, 240, 240))
+    if handle:
+        _centered(d, [handle], font(36, bold=False), 1800, (230, 230, 230))
+    img.save(out)
+    return out
+
+
+CW, CH = 1080, 1350                                                       # Instagram's 4:5 carousel
+
+
+def slide(title: str, lines: List[str], idx: int, total: int, out: Path, handle: str = "",
+          colours=((8, 30, 60), (20, 80, 140))) -> Path:
+    """One carousel slide: title, up to 6 lines, page number, footer."""
+    img = Image.new("RGB", (CW, CH), colours[0])
+    d = ImageDraw.Draw(img)
+    for y in range(CH):
+        a = y / (CH - 1)
+        d.line([(0, y), (CW, y)], fill=tuple(int(colours[0][i] + (colours[1][i] - colours[0][i]) * a) for i in range(3)))
+    tf, bf = font(76), font(52, bold=False)
+    titles = textwrap.wrap(title.upper(), 20)[:3]
+    body = [textwrap.wrap(line, 32)[:3] for line in lines[:6]]
+    height = len(titles) * (tf.size + 14) + 50 + sum(len(b) * (bf.size + 12) + 26 for b in body)
+    y = max(90, (CH - 120 - height) // 2)                                  # the block centred on the slide
+    for line in titles:
+        w = d.textlength(line, font=tf)
+        d.text(((CW - w) / 2, y), line, font=tf, fill=YELLOW)
+        y += tf.size + 14
+    y += 50
+    for parts in body:
+        for i, part in enumerate(parts):
+            d.text((80, y), ("• " if i == 0 else "   ") + part, font=bf, fill=WHITE)
+            y += bf.size + 12
+        y += 26
+    foot = f"{idx}/{total}  •  {FOOTER}" + (f"  •  {handle}" if handle else "")
+    ff = font(28, bold=False)
+    d.text(((CW - d.textlength(foot, font=ff)) / 2, CH - 80), foot, font=ff, fill=(220, 220, 220))
+    img.save(out)
+    return out

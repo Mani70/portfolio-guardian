@@ -496,9 +496,16 @@ compilation and up to 2 filings that were only alerted (read now from the docume
 session - one 90-120 s Reel with more clarity; one story -> its explainer; none -> a MARKET KI KAHANI story.
 ```yaml
 reel:
-  breaking: {enabled: true, max_per_day: 3, max_age_min: 120, sweep_hours: 2}   # voice_model: defaults to reel's
+  breaking: {enabled: true, max_per_day: 2, max_age_min: 120, sweep_hours: 2}   # voice_model: defaults to reel's
                                                                                  # feeds: {name: rss url}
 ```
+**Engagement extras** (`trader/reel/engage.py`): every Reel comes with a branded **cover** for the profile grid and a
+**posting checklist** (cover, the music to search for its series, the comment to pin); captions open with a hook and end
+with the comment question, a share line and "Save karo". With MARKET AAJ come an **"Aaj ka market" carousel**
+(4:5 slides: scoreboard, sectors, money flows, news, results, chart, next session) and a **Story poll card**
+("Kal Nifty: UP ya DOWN?" - add Instagram's poll sticker). Feed discipline: the 3 daily Reels plus at most 2 breaking
+Reels, and only for news Claude rates *major*; notable news goes to Story cards and RAAT KI REPORT.
+
 Claude cost at full volume: roughly $1.5-2.5 a day (catch-up searches ~$1, breaking reads, the night report).
 **Credits at full volume** (07:40 + 19:15 + 21:30 daily, Sundays, ~2 breaking a day) come to roughly 180-200k
 ElevenLabs credits a month with eleven_multilingual_v2 - more than a 100k-credit plan; check the plan's monthly

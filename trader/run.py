@@ -606,7 +606,7 @@ def cmd_reel(cfg, args) -> int:
                                      voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman")),
                                      facts_override=f)
         print(breaking.run(n.send, n.send_video, mk, feeds=bc.get("feeds"), send_photo=n.send_photo,
-                           max_per_day=int(bc.get("max_per_day", 3)), max_age_min=int(bc.get("max_age_min", 120)),
+                           max_per_day=int(bc.get("max_per_day", 2)), max_age_min=int(bc.get("max_age_min", 120)),
                            sweep_hours=int(bc.get("sweep_hours", 2))))
         return 0
     if args.slot == "company" and not rc.get("company", True):
@@ -620,7 +620,7 @@ def cmd_reel(cfg, args) -> int:
         return 0
     print(run(n.send, n.send_video, handle=str(rc.get("handle", "")), voice_model=rc.get("voice_model"),
               voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman")), force=args.force, slot=args.slot,
-              topic=args.topic, holidays=load_holidays(ROOT, cfg)))
+              topic=args.topic, holidays=load_holidays(ROOT, cfg), send_photo=n.send_photo, send_album=n.send_album))
     return 0
 
 

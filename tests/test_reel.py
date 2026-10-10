@@ -120,7 +120,7 @@ def test_full_reel_without_keys_builds_a_video_and_says_why(tmp_path, monkeypatc
                   store=tmp_path / "none")
     assert msg.startswith("reel (morning): sent myth") and videos and videos[0].stat().st_size > 10_000
     assert "MYTH vs SACH  •  EP 1" in said[0] and "Education only - not investment advice" in said[0]
-    assert "Voice: silence (no ElevenLabs key)" in said[1] and "pin a comment" in said[1]
+    assert "Voice: silence (no ElevenLabs key)" in said[1] and "comment and pin" in said[1] and "Music:" in said[1]
     assert job.run(said.append, lambda p, c: True, today=date(2026, 10, 12), out_dir=tmp_path) == \
         "reel (morning): already sent today"
     assert job.run(said.append, lambda p, c: True, today=date(2026, 10, 12), out_dir=tmp_path, store=tmp_path / "none",
