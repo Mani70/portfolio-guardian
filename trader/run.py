@@ -593,11 +593,12 @@ def cmd_reel(cfg, args) -> int:
     from .reel.job import run
     n = Notifier(dry_run=args.dry_run)
     rc = cfg.get("reel") or {}
-    if args.slot == "evening" and not rc.get("evening"):
+    if args.slot == "evening" and not rc.get("evening") and not args.topic:
         print("reel (evening): off (trader.yaml reel: {evening: true} turns on the second daily Reel)")
         return 0
     print(run(n.send, n.send_video, handle=str(rc.get("handle", "")), voice_model=rc.get("voice_model"),
-              voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman")), force=args.force, slot=args.slot))
+              voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman")), force=args.force, slot=args.slot,
+              topic=args.topic))
     return 0
 
 
@@ -877,6 +878,7 @@ def main(argv=None) -> int:
     ap.add_argument("--no-update", action="store_true", help="retest: use the data already downloaded")
     ap.add_argument("--forget", action="store_true",
                     help="cancel: mark earlier-day orders INDstocks no longer knows as cancelled (check the app first)")
+    ap.add_argument("--topic", default="", help="reel: myth:N or story:N (numbers in trader/reel/content.py)")
     ap.add_argument("--slot", default="morning", choices=["morning", "evening"], help="reel: which daily Reel")
     ap.add_argument("--voice", default="", help="voices: compare models and spellings for this voice ID")
     ap.add_argument("--model", default="", help="voices: ElevenLabs model for the first test")

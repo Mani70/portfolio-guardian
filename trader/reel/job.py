@@ -3,7 +3,8 @@
   python -m trader.run reel                   # morning (cron 07:40): MYTH vs SACH
   python -m trader.run reel --slot evening    # evening (cron 18:40, if reel.evening is on): NEWS SAMJHO when there
                                               # is notable official news, else MARKET KI KAHANI
-Each slot is sent once a day (--force makes another).
+Each slot is sent once a day (--force makes another; --topic myth:N / story:N picks the topic, e.g. for the
+first Reels: python -m trader.run reel --force --topic myth:13).
 """
 from __future__ import annotations
 
@@ -21,9 +22,23 @@ OUT = ROOT / "cache" / "reel"
 log = logging.getLogger("trader.reel")
 
 
-def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = None) -> dict:
-    """What today's Reel in this slot is about (one topic) and its series' episode number."""
+def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = None, topic: str = "") -> dict:
+    """What today's Reel in this slot is about (one topic) and its series' episode number. topic 'myth:N' or
+    'story:N' picks one by its number in content.MYTHS / content.STORIES instead (e.g. for the first Reels)."""
     f = {"date": today.isoformat()}
+    if topic:
+        kind, _, n = topic.partition(":")
+        items = {"myth": content.MYTHS, "story": content.STORIES}.get(kind)
+        if items is None or not n.isdigit() or int(n) >= len(items):
+            raise ValueError(f"topic must be myth:0-{len(content.MYTHS) - 1} or story:0-{len(content.STORIES) - 1}")
+        if kind == "myth":
+            myth, truth, lesson = items[int(n)]
+            f.update(format="myth", myth=myth, truth=truth, lesson=(lesson, content.LESSON[lesson]),
+                     next=content.pick(content.MYTHS, today + timedelta(days=1))[0])
+        else:
+            f.update(format="story", story=items[int(n)], next="Market ki ek aur sachchi kahani")
+        f["episode"] = episodes.get(f["format"], 0) + 1
+        return f
     news = content.news_item(today, store) if slot == "evening" else None
     if slot == "morning":
         myth, truth, lesson = content.pick(content.MYTHS, today)
@@ -41,8 +56,8 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
 
 def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = None, handle: str = "",
          voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
-         slot: str = "morning", episodes: Optional[dict] = None) -> dict:
-    facts = facts_for(today, slot, episodes or {}, store)
+         slot: str = "morning", episodes: Optional[dict] = None, topic: str = "") -> dict:
+    facts = facts_for(today, slot, episodes or {}, store, topic)
     sc, source = S.write(facts, client)
     work = out_dir / f"work_{today:%Y%m%d}_{slot}"
     if work.exists():
@@ -70,7 +85,7 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
 
 def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, store=None,
         handle: str = "", voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
-        force: bool = False, slot: str = "morning") -> str:
+        force: bool = False, slot: str = "morning", topic: str = "") -> str:
     today = today or date.today()
     state_p = out_dir / "state.json"
     st = json.loads(state_p.read_text()) if state_p.exists() else {}
@@ -78,7 +93,7 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
     if sent == today.isoformat() and not force:
         return f"reel ({slot}): already sent today"
     episodes = st.get("episodes", {})
-    r = make(today, out_dir, client, store, handle, voice_model, voice_id, speak, slot, episodes)
+    r = make(today, out_dir, client, store, handle, voice_model, voice_id, speak, slot, episodes, topic)
     ok = send_video(r["video"], f"🎬 {slot.title()} Reel ({today:%a %d %b}) - review before posting")
     notes = [f"📝 Instagram caption (copy-paste):\n\n{r['caption']}",
              "Before you post: watch it once; check the news source on nseindia.com if a company is named.\n"
