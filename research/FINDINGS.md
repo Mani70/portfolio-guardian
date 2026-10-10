@@ -729,3 +729,20 @@ What it shows (for explaining news, not for trading):
 
 Use (as pre-registered): the Reel quotes a type's average only when it is "consistent", always as "an average, not a
 prediction for any one company", and says "no reliable pattern" otherwise. No trading rule follows.
+
+## Addendum 23 - after a day like today (12 NSE indices, 2012 - Sep 2026)
+
+research/market23.py, results in research/market23_results.csv. 168 cells (12 indices x 7 move buckets x 1 and 5
+sessions); a pattern counts only with the same sign in 2012-18 and 2019-26 and |t| >= 3.5.
+
+**10 cells pass, all but one at the 1-session horizon, and nearly all are continuation in the broad mid/small-cap
+indices**: after Midcap 150 or Smallcap 250 fall 0.5-3%, the next day is weaker than an ordinary day (Midcap 150 after
+-1.5% to -0.5%: -0.57 points, rose 46% of the time against 58% normally; t = -11.5); after Smallcap 250 rises, the next
+day is stronger. This is a known index property - many small shares trade late or thinly, so part of one day's move
+shows up in the index the next day - and not a tradable edge (it is not net of costs and an index cannot be bought at
+its own close). Nifty 50: one cell passes (after a +1.5% to +3% day it rose the next day 68% of the time against 54%
+normally, t = 3.8); every other Nifty 50 bucket, including big falls, shows no reliable pattern over 1 or 5 sessions.
+Realty after a 1.5-3% fall and Energy (both directions, small) also pass at 1 session.
+
+Use: the MARKET AAJ Reel may quote a passing cell as history ("on such days, the next day ... x% of the time, against
+y% on an ordinary day - an average, not a prediction"); for every other day it says history shows no reliable pattern.
