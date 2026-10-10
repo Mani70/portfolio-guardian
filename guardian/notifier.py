@@ -42,3 +42,20 @@ class Notifier:
                 log.error("Telegram send failed: HTTP %s %s", r.status_code, r.text[:200])
         except requests.RequestException as e:
             log.error("Telegram send failed: %s", e)
+
+    def send_video(self, path, caption: str = "") -> bool:
+        """A video file (e.g. the daily Reel) to the Telegram chat. True if Telegram accepted it."""
+        print(f"[video] {path}\n{caption}")
+        if self.dry_run or not (self.tg_token and self.tg_chat):
+            return False
+        try:
+            with open(path, "rb") as fh:
+                r = requests.post(f"https://api.telegram.org/bot{self.tg_token}/sendVideo",
+                                  data={"chat_id": self.tg_chat, "caption": caption[:1000], "supports_streaming": "true"},
+                                  files={"video": fh}, timeout=180)
+            if r.status_code != 200:
+                log.error("Telegram video failed: HTTP %s %s", r.status_code, r.text[:200])
+            return r.status_code == 200
+        except (OSError, requests.RequestException) as e:
+            log.error("Telegram video failed: %s", e)
+            return False
