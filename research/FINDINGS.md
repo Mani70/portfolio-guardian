@@ -694,3 +694,38 @@ then tested once on 2020-2026.
 
 Outcome as pre-registered: the short-term research ends here. The video says so plainly; the live money stays on the
 long-term rulebook.
+
+## Addendum 22: how NSE shares reacted to official news, 2012 - Sep 2026 (10 Oct 2026; pre-registered; research/news22.py)
+
+1.48 million NSE corporate announcements (every one, by date windows; none failed), classified by the pre-registered
+rules, plus Addendum 18's annual results as filed: 117,219 classified events; after the ₹1 crore-a-day liquidity
+filter and one-per-20-sessions, the counts below. Move = the share's move minus the Nifty 50's, from the close before
+the news to 5 sessions later.
+
+| type | events | 5-session move vs Nifty (median) | beat the Nifty | t | 2012-18 / 2019-26 | consistent |
+|---|---|---|---|---|---|---|
+| order or contract won | 1,872 | +1.34% (+0.45%) | 54% | 6.72 | +0.33% / +1.43% | yes |
+| stock split | 527 | +1.18% (+0.60%) | 55% | 3.47 | +0.72% / +1.38% | yes |
+| acquisition | 18,252 | +0.48% (-0.08%) | 49% | 3.34 | +0.33% / +0.55% | yes |
+| annual loss | 752 | -1.07% (-1.60%) | 40% | -3.46 | -0.98% / -1.13% | yes |
+| MD / CEO / CFO resigned | 1,375 | -0.74% (-0.93%) | 42% | -3.86 | -1.09% / -0.63% | yes |
+| rating upgrade | 493 | +0.85% | 53% | 2.70 | +0.78% / +0.90% | no (t < 3) |
+| bonus issue | 546 | +0.75% | 52% | 1.99 | +0.91% / +0.63% | no |
+| annual profit down 20%+ | 1,183 | -0.89% | 39% | -2.90 | -0.87% / -0.91% | no (t < 3) |
+| annual profit up 20%+ | 2,543 | -0.21% | 43% | -0.52 | -0.76% / +0.14% | no |
+| fund raising | 2,536 | +0.25% | 45% | 0.78 | | no |
+| buyback | 1,000 | +0.03% | 49% | 0.16 | | no |
+| default / insolvency | 543 | -0.36% | 43% | -0.39 | | no |
+| rating downgrade | 70 | +0.04% | 43% | -0.13 | | no |
+| auditor resigned | 154 | -0.12% | 45% | -1.08 | | no |
+
+What it shows (for explaining news, not for trading):
+- Even the consistent effects are small averages with wide spreads: an order win beat the Nifty only 54% of the time;
+  the typical (median) acquisition did slightly worse than the Nifty. No type is close to a sure thing.
+- Good results are usually expected: annual profit up 20%+ did not beat the Nifty on average; losses and leadership
+  exits were the clearer negatives.
+- Buybacks, fund raising and even defaults show no reliable 5-session pattern after they are announced (much is
+  priced in earlier, or the events are too varied).
+
+Use (as pre-registered): the Reel quotes a type's average only when it is "consistent", always as "an average, not a
+prediction for any one company", and says "no reliable pattern" otherwise. No trading rule follows.
