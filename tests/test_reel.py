@@ -81,6 +81,16 @@ def test_morning_is_a_myth_episode_and_evening_falls_back_to_a_story(tmp_path):
     assert all(m[0].endswith("?") and not S.COMMAND.search(m[0]) for m in content.MYTHS)
 
 
+def test_a_topic_can_be_chosen_for_the_first_reels(tmp_path):
+    f = job.facts_for(date(2026, 10, 12), "morning", {"myth": 2}, tmp_path, topic="myth:13")
+    assert f["myth"] == content.MYTHS[13][0] and f["episode"] == 3
+    f = job.facts_for(date(2026, 10, 12), "morning", {}, tmp_path, topic="story:0")
+    assert f["format"] == "story" and f["story"][0].startswith("Harshad Mehta") and f["episode"] == 1
+    import pytest
+    with pytest.raises(ValueError):
+        job.facts_for(date(2026, 10, 12), "morning", {}, tmp_path, topic="myth:99")
+
+
 def test_news_skips_routine_employee_allotments_and_prefers_a_type_with_a_track_record(tmp_path):
     pd.DataFrame([
         {"date": "2026-10-12", "symbol": "ICICIBANK", "subject": "Allotment of Securities", "link": "x",
