@@ -695,3 +695,52 @@ Fallback F unchanged. The yearly re-test evaluates the rulebook's own weights an
 rulebook_fn), same tests and benchmark. Before going live the engine replay must match M10's research numbers within
 1 point a year in A and B. The switch itself is an ordinary rebalance at the next review (the Nifty 50 holding is 10
 points over its new target, beyond the 5-point band).
+
+## Addendum 20 (10 Oct 2026, before any F&O data is downloaded): index options, tested on 14 years, then on paper
+
+Owner's request: research F&O and run it on paper for 3-4 weeks before anything else. Context: SEBI's study (Sept
+2024) found 93% of individual F&O traders lost money in FY22-FY24. A Nifty lot today is 65 units, about ₹14.6 lakh of
+index exposure, almost 4 times this account (₹3.84 lakh), so only defined-risk positions (where the most that can be
+lost is known when the trade is placed) are considered; buying or selling futures, and selling options without a
+protective option, are excluded.
+
+Why 3-4 weeks of paper cannot decide anything: that is one monthly cycle. Option-selling strategies win most months
+and lose rarely but heavily, so a few good paper weeks prove nothing. The evidence is the 14-year test below; the paper
+run checks the mechanics (strike choice, prices, costs, margin, messages) on live data.
+
+Data (research/fo20.py): NSE's daily F&O files, Jan 2012 - Oct 2026 (the old fo...bhav.csv files to Jul 2024, then the
+UDiFF files), Nifty index options and futures only. Prices: the day's close of each option; only strikes that traded
+that day can be chosen (the nearest traded strike to the target). Expiry: the option is worth its intrinsic value at
+the Nifty 50's close on expiry day (NSE's final settlement).
+
+Monthly cycle: each position is opened at the close of the first session after a monthly expiry, in the next monthly
+expiry, and held to expiry (no stop, no adjustment), so months never overlap.
+- S1, bull put spread: sell the put 3% below the Nifty, buy the put 6% below. Most that can be lost: the gap between
+  the strikes minus the premium received.
+- S2, iron condor: sell puts 4% below and calls 4% above, buy puts 7% below and calls 7% above.
+- S3, crash insurance: the Nifty held, plus a put 5% below bought every month; against the Nifty held.
+- S4, trend option buying (the common retail approach): if the Nifty is above its 200-day average buy the call at the
+  current level (at-the-money), else the put; held to expiry.
+Neighbours: S1 with 2%/5% and 4%/7%; S2 with 3%/6% and 5%/8%. Weekly versions of S1 and S2 (weekly expiries, 2019 on)
+are reported without a bar.
+
+Costs on every leg: ₹20 brokerage an order; STT 0.0625% of the premium on option sales to Sep 2024 and 0.1% after, and
+0.125% of the settlement value on bought options that expire in the money; exchange charges 0.05% of the premium;
+stamp duty 0.003% on purchases; SEBI fee ₹10 a crore; GST 18% on brokerage, exchange and SEBI fees; slippage
+max(₹1, 2% of the premium) a unit on every leg.
+
+Measured per lot of 65 units (today's size, so rupee results are comparable across years) on a ₹3.84 lakh account
+holding one position at a time, the rest earning the liquid fund's rate. Periods: A = Feb 2012 - Dec 2018,
+B = Jan 2019 - Sep 2026.
+
+Pass bars (S1, S2, S4), in A AND in B:
+- an edge: mean monthly profit after all costs above zero with t >= 2 (months are independent here);
+- survivable: the account's worst fall at most 25%, and no single month losing more than 10% of the account;
+- worth it: the account's yearly return at least 2 points above the liquid fund alone;
+- S1 and S2 only: both neighbours also profitable on average in A and B.
+S3 passes if, in A and B, the insured Nifty has a higher Sharpe over cash than the Nifty held and a worst fall at
+least 10 points smaller.
+
+What changes: every strategy runs on paper for 3-4 weeks from the next monthly expiry, with a plain-language Telegram
+report each evening (position, value, profit or loss, what happens next). Real money only for a strategy that passed
+here, one lot, defined risk, and only on the owner's decision after the paper run.
