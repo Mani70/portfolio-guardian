@@ -47,7 +47,7 @@ def test_rulebook_decides_the_strategies(tmp_path):
     assert set(out["strategies"]) == {"core", "gap_reversal"}               # trader.yaml's own list is ignored
     core = out["strategies"]["core"]
     assert core["class"] == "core_allocation" and core["live"] and core["max_drawdown_pct"] == 100
-    assert core["params"]["weights"]["NIFTYBEES"] == 0.45 and not out["strategies"]["gap_reversal"]["live"]
+    assert core["params"]["weights"]["NIFTYBEES"] == 0.35 and core["params"]["weights"]["MID150BEES"] == 0.10 and not out["strategies"]["gap_reversal"]["live"]
     assert out["capital"]["all_cash"] and out["capital"]["reserve"] == 10_000
     assert out["_autopilot"] == {"rule": "L1", "core": "core", "retired": ["trend_allocation", "momentum_rotation"]}
     assert [type(s).__name__ for s in build(out)] == ["CoreAllocation", "GapReversal"]
@@ -73,7 +73,7 @@ def test_handover_moves_retired_holdings_in_both_books_but_waits_for_working_ord
     live.save_position(Position("momentum_rotation", "INFY", "CNC", 5, 1500.0, t, "M0"))
     live.close(), paper.close()
     notes = AP.handover(c, jp)
-    assert any("MON100: 55 units" in n for n in notes) and not any("INFY" in n for n in notes)
+    assert any("55 units of MON100" in n for n in notes) and not any("INFY" in n for n in notes)
     live, paper = Journal(jp, "live"), Journal(jp, "paper")
     assert [p.symbol for p in live.positions(strategy="core")] == ["MON100"]
     assert [p.symbol for p in paper.positions(strategy="core")] == ["MON100"]

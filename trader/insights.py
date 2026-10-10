@@ -51,12 +51,14 @@ RULES = {
     "top_n": 5,
 }
 # research/FINDINGS.md Addendum 15: the rules above, unchanged, on every session of 2011-2026 (survivorship-free)
-TESTED = ("20-year test (2011-2026): BUY ideas beat the Nifty 50 by +1.9% per 20 sessions after costs in 2011-15 "
-          "but only +0.75% in 2016-26, not statistically reliable - no proven edge. AVOID ideas did the same as the "
-          "Nifty 50 (no proven warning value).")
+TESTED = ("Has this worked before? We tested these exact rules on 2011-2026 prices (15 years). BUY ideas beat the "
+          "Nifty 50 by 1.9% a month after costs in 2011-15, but by only 0.75% in 2016-26, which could be luck. AVOID "
+          "ideas did the same as the Nifty 50. So there is no proven edge: use these as a starting point for your own "
+          "research, not as advice.")
 
 # research/FINDINGS.md Addendum 16 (dividend-yield tilt on the long-term mix, 2006-2026)
-VALUATION_TESTED = ("helped a little: +0.9 point a year in 2006-15 (mostly 2008), +0.1 in 2016-26.")
+VALUATION_TESTED = ("In a 20-year test this rule added a little: +0.9% a year in 2006-15 (mostly by holding "
+                    "less before the 2008 crash) and +0.1% a year in 2016-26.")
 
 ARCH = "https://nsearchives.nseindia.com"
 FEED_ANN = f"{ARCH}/content/RSS/Online_announcements.xml"          # every filing of the day (~1,000)
@@ -332,12 +334,14 @@ def facts(panel: Dict[str, pd.DataFrame], bench: str = "NIFTYBEES") -> pd.DataFr
 def market(panel: Dict[str, pd.DataFrame], bench: str = "NIFTYBEES") -> dict:
     c = panel["close"].get(bench)
     if c is None or c.dropna().size < 200:
-        return {"ok": None, "why": "Nifty ETF history too short for the market filter"}
+        return {"ok": None, "why": "Market mood: unknown (not enough price history for the Nifty 50 fund yet)."}
     c = c.dropna()
     px, avg = float(c.iloc[-1]), float(c.iloc[-200:].mean())
-    return {"ok": px > avg, "px": px, "avg": avg,
-            "why": f"Nifty ETF ₹{px:,.2f} is {'above' if px > avg else 'BELOW'} its 200-day average ₹{avg:,.2f}"}
-
+    up = px > avg
+    return {"ok": up, "px": px, "avg": avg,
+            "why": (f"{'🟢 Market mood: RISING' if up else '🔴 Market mood: FALLING'}. The Nifty 50 fund (it owns "
+                    f"India's 50 biggest companies) is at ₹{px:,.2f}, {'above' if up else 'below'} its average price "
+                    f"of the last 200 trading days (about 10 months): ₹{avg:,.2f}.")}
 
 @dataclass
 class Report:
@@ -366,18 +370,22 @@ def screen(df: pd.DataFrame, mkt: dict, flags: Optional[Dict[str, List[dict]]], 
     """Apply the rules; record how many stocks survive each one (the explanation when nothing qualifies)."""
     R = RULES
     red = {s for s, items in (flags or {}).items() if any(i.get("red") for i in items)}
-    steps_b = [("traded today (EQ)", pd.Series(True, index=df.index)),
-               (f"liquid (≥ ₹{R['min_value_cr']:.0f} cr a day, price ≥ ₹{R['min_price']:.0f}, 1 year of history)",
-                df["liquid"]),
-               ("uptrend (above the 50-day, 50-day above the 200-day, 200-day rising)",
+    steps_b = [("traded on NSE today", pd.Series(True, index=df.index)),
+               (f"easy to buy and sell (₹{R['min_value_cr']:.0f} crore+ traded a day, price ₹{R['min_price']:.0f}+, "
+                "listed for 1 year+)", df["liquid"]),
+               ("rising trend (price above its 50-day and 200-day average prices, and the 200-day average going up)",
                 (df["close"] > df["sma50"]) & (df["sma50"] > df["sma200"]) & (df["sma200"] > df["sma200_prev"])),
-               (f"momentum in the top {100 - R['buy_momentum_pct']:.0f}% of liquid stocks",
+               (f"among the strongest {100 - R['buy_momentum_pct']:.0f}% for price gains over 6-12 months",
                 df["mom_pct"] >= R["buy_momentum_pct"]),
-               (f"within {100 - R['buy_near_high'] * 100:.0f}% of the 52-week high", df["close"] >= R["buy_near_high"] * df["hi52"]),
-               (f"not over-extended (≤ {R['buy_max_extension']:.0%} above the 50-day, today ≤ +{R['buy_max_day_move']:.0f}%)",
+               (f"within {100 - R['buy_near_high'] * 100:.0f}% of its highest price of the past year",
+                df["close"] >= R["buy_near_high"] * df["hi52"]),
+               (f"not jumped too far too fast (at most {R['buy_max_extension']:.0%} above its 50-day average, up at "
+                f"most {R['buy_max_day_move']:.0f}% today)",
                 (df["close"] <= (1 + R["buy_max_extension"]) * df["sma50"]) & (df["day_pct"] <= R["buy_max_day_move"])),
-               (f"volatility acceptable (average daily range ≤ {R['buy_max_atr_pct']:.0f}%)", df["atr_pct"] <= R["buy_max_atr_pct"]),
-               ("no red-flag filing in 30 days" if flags is not None else "red-flag filings: NOT checked (feed unavailable)",
+               (f"not too jumpy (moves less than {R['buy_max_atr_pct']:.0f}% on a normal day)",
+                df["atr_pct"] <= R["buy_max_atr_pct"]),
+               ("no serious warning in its NSE announcements (30 days)" if flags is not None
+                else "NSE announcements: NOT checked (NSE's feed was unavailable)",
                 pd.Series(~df.index.isin(list(red)), index=df.index))]
     keep = pd.Series(True, index=df.index)
     funnel_b = []
@@ -393,11 +401,12 @@ def screen(df: pd.DataFrame, mkt: dict, flags: Optional[Dict[str, List[dict]]], 
         cand = _ranked(cand).head(R["top_n"])
     if len(watch):
         watch = _ranked(watch).head(R["top_n"])
-    steps_a = [("liquid", df["liquid"]),
-               ("downtrend (below the 200-day, 200-day falling)",
+    steps_a = [("easy to buy and sell", df["liquid"]),
+               ("falling trend (below its 200-day average price, which is going down)",
                 (df["close"] < df["sma200"]) & (df["sma200"] < df["sma200_prev"])),
-               (f"momentum in the bottom {R['avoid_momentum_pct']:.0f}%", df["mom_pct"] <= R["avoid_momentum_pct"]),
-               (f"within {R['avoid_near_low'] * 100 - 100:.0f}% of the 52-week low", df["close"] <= R["avoid_near_low"] * df["lo52"])]
+               (f"among the weakest {R['avoid_momentum_pct']:.0f}% over 6-12 months", df["mom_pct"] <= R["avoid_momentum_pct"]),
+               (f"within {R['avoid_near_low'] * 100 - 100:.0f}% of its lowest price of the past year",
+                df["close"] <= R["avoid_near_low"] * df["lo52"])]
     keep = pd.Series(True, index=df.index)
     funnel_a = []
     for name, cond in steps_a:
@@ -417,37 +426,54 @@ def _rs(x: float) -> str:
     return f"₹{x:,.2f}" if x < 1000 else f"₹{x:,.0f}"
 
 
+def _move(x: float) -> str:
+    return f"{'up' if x >= 0 else 'down'} {abs(x):.1f}% today"
+
+
 def why_buy(s: str, r: pd.Series, n_liquid: int, filings: Optional[List[dict]], watch: bool = False,
             window: str = "30 days") -> str:
-    lines = [f"{'👀' if watch else '🟢'} {s}  {_rs(r.close)} ({r.day_pct:+.1f}% today)"]
-    lines.append(f"• Trend: above its 50-day ({_rs(r.sma50)}) and 200-day ({_rs(r.sma200)}) averages; the 200-day "
-                 f"is rising ({(r.sma200 / r.sma200_prev - 1) * 100:+.1f}% in 4 weeks).")
-    lines.append(f"• Momentum: top {_pct(100 - r.mom_pct)}% of {n_liquid} liquid stocks (6 months {r.r126:+.0f}%, "
-                 f"12 months {r.r252:+.0f}%, volatility {r.vol:.0f}% a year).")
-    lines.append(f"• Strength: {(1 - r.close / r.hi52) * 100:.1f}% below its 52-week high ({_rs(r.hi52)}); "
-                 f"{r.rs63:+.0f} points vs the Nifty ETF over 3 months.")
-    if not math.isnan(r.deliv) and not math.isnan(r.deliv20):
-        lines.append(f"• Buyers: delivery {r.deliv:.0f}% of volume today vs {r.deliv20:.0f}% average"
-                     + (" (more shares taken home: accumulation)." if r.deliv > r.deliv20 + 5 else "."))
-    lines.append(f"• Liquidity: ₹{r.value_cr:,.0f} cr traded a day; volume today {r.vol_ratio:.1f}x its 20-day average.")
+    lines = [f"{'👀' if watch else '🟢'} {s} — {_rs(r.close)} ({_move(r.day_pct)})", "Why it is on the list:"]
+    lines.append(f"• Rising steadily: today's price is above its average price of the last 50 trading days "
+                 f"({_rs(r.sma50)}) and of the last 200 trading days ({_rs(r.sma200)}, about 10 months), and that "
+                 f"longer average is still climbing ({(r.sma200 / r.sma200_prev - 1) * 100:+.1f}% in 4 weeks).")
+    lines.append(f"• One of the strongest: its price gain over the last 6-12 months puts it in the top "
+                 f"{_pct(100 - r.mom_pct)}% of the {n_liquid} easily traded stocks (6 months: {r.r126:+.0f}%, "
+                 f"12 months: {r.r252:+.0f}%).")
+    gap = (1 - r.close / r.hi52) * 100
+    lines.append(f"• Near its best: at its highest price of the past year ({_rs(r.hi52)})." if gap < 0.05 else
+                 f"• Near its best: only {gap:.1f}% below its highest price of the past year ({_rs(r.hi52)}).")
+    lines.append("• Versus the market: over the last 3 months it did about the same as the Nifty 50 fund."
+                 if abs(r.rs63) < 1 else
+                 f"• Versus the market: over the last 3 months it did {abs(r.rs63):.0f} percentage points "
+                 f"{'better' if r.rs63 >= 0 else 'worse'} than the Nifty 50 fund.")
+    if not math.isnan(r.deliv) and not math.isnan(r.deliv20) and r.deliv > r.deliv20 + 5:
+        lines.append(f"• Buyers are keeping the shares: {r.deliv:.0f}% of today's traded shares went into investors' "
+                     f"accounts instead of being sold the same day (usually {r.deliv20:.0f}%) - a sign of real buying.")
+    lines.append(f"• Easy to buy and sell: about ₹{r.value_cr:,.0f} crore of its shares trade every day.")
     lines += _filings(filings, window)
     stop = max(r.sma50, r.close - 2 * r.atr_pct / 100 * r.close)
-    lines.append(f"• Risks: moves {r.atr_pct:.1f}% a day on average; the idea is wrong below {_rs(stop)} (the 50-day "
-                 "average or 2 average days' range, whichever is higher)." + _event_risk(filings or []))
+    lines.append("Risks:")
+    lines.append(f"• It usually moves about {r.atr_pct:.1f}% up or down in a single day.")
+    lines.append(f"• Exit level (\"stop-loss\"): if it closes below {_rs(stop)}, the idea has failed and that is the "
+                 "price to sell at to keep the loss small. (It is the higher of its 50-day average and today's price "
+                 "minus two normal days' moves.)" + _event_risk(filings or []))
     return "\n".join(lines)
 
 
 def why_avoid(s: str, r: pd.Series, n_liquid: int, filings: Optional[List[dict]], held: bool = False,
               window: str = "30 days") -> str:
-    lines = [f"🔴 {s}  {_rs(r.close)} ({r.day_pct:+.1f}% today)" + ("  ← YOU HOLD THIS" if held else "")]
-    lines.append(f"• Trend: below its 200-day average ({_rs(r.sma200)}), which is falling "
-                 f"({(r.sma200 / r.sma200_prev - 1) * 100:+.1f}% in 4 weeks); 50-day {_rs(r.sma50)}.")
-    lines.append(f"• Momentum: weakest {_pct(r.mom_pct)}% of {n_liquid} liquid stocks (6 months {r.r126:+.0f}%, "
-                 f"12 months {r.r252:+.0f}%).")
-    lines.append(f"• Weakness: {(r.close / r.lo52 - 1) * 100:.1f}% above its 52-week low ({_rs(r.lo52)}), "
-                 f"{(1 - r.close / r.hi52) * 100:.0f}% below its high; {r.rs63:+.0f} points vs the Nifty ETF over 3 months.")
+    lines = [f"🔴 {s} — {_rs(r.close)} ({_move(r.day_pct)})" + ("  ← YOU OWN THIS" if held else ""),
+             "Why to be careful:"]
+    lines.append(f"• Falling for months: its price is below its average price of the last 200 trading days "
+                 f"({_rs(r.sma200)}, about 10 months), and that average is itself going down "
+                 f"({(r.sma200 / r.sma200_prev - 1) * 100:+.1f}% in 4 weeks).")
+    lines.append(f"• One of the weakest: its price over the last 6-12 months puts it in the bottom "
+                 f"{_pct(r.mom_pct)}% of the {n_liquid} easily traded stocks (6 months: {r.r126:+.0f}%, "
+                 f"12 months: {r.r252:+.0f}%).")
+    lines.append(f"• Near its lowest: only {(r.close / r.lo52 - 1) * 100:.1f}% above its lowest price of the past year "
+                 f"({_rs(r.lo52)}), and {(1 - r.close / r.hi52) * 100:.0f}% below its highest.")
     lines += _filings(filings, window)
-    lines.append(f"• What would change the view: a close back above the 200-day average ({_rs(r.sma200)}).")
+    lines.append(f"What would change this view: a close back above {_rs(r.sma200)} (its 200-day average price).")
     return "\n".join(lines)
 
 
@@ -457,10 +483,11 @@ def _pct(x: float) -> int:
 
 def _filings(items: Optional[List[dict]], window: str = "30 days") -> List[str]:
     if items is None:
-        return ["• Filings: NOT checked today (NSE's filings feed unavailable) - read them before acting."]
+        return ["• Company announcements: NOT checked today (NSE's feed was unavailable) - read them on nseindia.com "
+                "before acting."]
     if not items:
-        return [f"• Filings ({window}): none on NSE."]
-    out = [f"• Filings ({window}, NSE):"]
+        return [f"• Company announcements on NSE ({window}): none."]
+    out = [f"• Company announcements on NSE ({window}) - ⛔ serious warning, ⚠️ worth a look, 📅 coming up:"]
     for i in items[:4]:
         mark = "⛔ " if i.get("red") else "⚠️ " if i.get("caution") else "📅 " if i.get("ahead") else ""
         out.append(f"   {mark}{i['date']}: {i['title'][:110]}")
@@ -471,50 +498,55 @@ def _filings(items: Optional[List[dict]], window: str = "30 days") -> List[str]:
 
 def _event_risk(items: List[dict]) -> str:
     ahead = [i for i in items if i.get("ahead")]
-    return f" Event ahead: {ahead[0]['title'][:80]} ({ahead[0]['date']})." if ahead else ""
+    return (f"\n• Coming up: {ahead[0]['title'][:80]} ({ahead[0]['date']}). Prices can jump either way around such "
+            "events." if ahead else "")
 
 
 def compose(rep: Report, flags: Optional[Dict[str, List[dict]]], track: str = "", window: str = "30 days",
             valuation: str = "") -> List[str]:
     get = (lambda s: flags.get(s, [])) if flags is not None else (lambda s: None)   # noqa: E731
     d = pd.Timestamp(rep.date)
-    head = (f"📊 Swing ideas for {d:%a %d %b %Y} (information only - the bot does NOT trade these)\n"
-            "A price-and-momentum screen: it does not judge the business, its earnings, debt or valuation.\n"
-            f"Screened {rep.universe} NSE stocks, {rep.liquid} liquid. Market: {rep.market.get('why', 'unknown')}."
-            + (f"\n{valuation}" if valuation else ""))
+    head = (f"📊 Daily stock ideas — {d:%a %d %b %Y}\n\n"
+            f"What is this? Every evening a computer scans {rep.universe} NSE stocks and picks those whose prices are "
+            "rising strongly (BUY ideas) or falling steadily (AVOID ideas). It looks ONLY at price movements, not at "
+            "the company's business, profits or debts. Information only: your bot does NOT buy or sell these.\n\n"
+            f"{rep.market.get('why', 'Market mood: unknown.')}"
+            + (f"\n\n{valuation}" if valuation else "")
+            + f"\n\nEasily traded stocks today: {rep.liquid} (at least ₹10 crore of shares change hands a day, so you "
+              "can buy and sell without moving the price much).")
     msgs = [head]
     if len(rep.buys):
-        msgs.append("BUY ideas (days to weeks):\n\n" + "\n\n".join(
+        msgs.append("🟢 BUY IDEAS (for holding a few days to a few weeks)\n\n" + "\n\n".join(
             why_buy(s, r, rep.liquid, get(s), window=window) for s, r in rep.buys.iterrows()))
     else:
-        msgs.append("No BUY idea today. How the stocks were filtered:\n" + "\n".join(
-            f"• {name}: {n}" for name, n in rep.funnel_buy) + "\n" + _no_buy_reason(rep))
+        msgs.append("🟢 No BUY idea today.\nHow the stocks were narrowed down (each check keeps only the stocks that "
+                    "pass it):\n" + "\n".join(f"• {name}: {n} left" for name, n in rep.funnel_buy) + "\n"
+                    + _no_buy_reason(rep))
         if len(rep.watch):
-            msgs.append("WATCHLIST - strongest stocks that pass every other rule; NOT buy ideas while the market is in "
-                        "a downtrend (they become ideas when it recovers):\n\n" + "\n\n".join(
+            msgs.append("👀 WATCHLIST - the strongest stocks right now. They are NOT buy ideas while the market is "
+                        "falling; they would become ideas when the market turns up again.\n\n" + "\n\n".join(
                             why_buy(s, r, rep.liquid, get(s), watch=True, window=window)
                             for s, r in rep.watch.iterrows()))
     if len(rep.avoids):
-        msgs.append("AVOID / EXIT if held:\n\n" + "\n\n".join(
+        msgs.append("🔴 AVOID - or consider selling if you own it (prices falling steadily)\n\n" + "\n\n".join(
             why_avoid(s, r, rep.liquid, get(s), window=window) for s, r in rep.avoids.iterrows()))
     else:
-        msgs.append("No AVOID idea today: " + "; ".join(f"{name}: {n}" for name, n in rep.funnel_avoid) + ".")
+        msgs.append("🔴 No AVOID idea today. How the stocks were narrowed down: "
+                    + "; ".join(f"{name}: {n} left" for name, n in rep.funnel_avoid) + ".")
     if len(rep.holdings_weak):
-        msgs.append("Your holdings showing weakness:\n\n" + "\n\n".join(
+        msgs.append("⚠️ Stocks YOU OWN that look weak\n\n" + "\n\n".join(
             why_avoid(s, r, rep.liquid, get(s), held=True, window=window) for s, r in rep.holdings_weak.iterrows()))
-    msgs.append((track + "\n\n" if track else "") +
-                "How these are chosen: fixed rules (trend, NSE-style momentum, 52-week high, liquidity, volatility, "
-                "official filings), not tuned to recent results.\n" + TESTED + "\nNot advice; check the filings "
-                "yourself before acting.")
+    msgs.append((track + "\n\n" if track else "") + TESTED + "\n\nNot investment advice. Before acting on any idea, "
+                "read the company's recent announcements on nseindia.com yourself.")
     return _split(msgs)
 
 
 def _no_buy_reason(rep: Report) -> str:
     if rep.market.get("ok") is False:
-        return ("Why: the market itself is in a downtrend; in such markets most breakouts fail, so no stock is "
-                "suggested however strong it looks.")
+        return ("Why none: the overall market is falling. In a falling market most stocks that look strong soon drop "
+                "with it, so the rules suggest nothing until the market recovers.")
     zero = next((name for name, n in rep.funnel_buy if n == 0), None)
-    return f"Why: no stock passed '{zero}'." if zero else "Why: no stock passed every rule."
+    return f"Why none: no stock passed the check '{zero}'." if zero else "Why none: no stock passed every check."
 
 
 def _split(msgs: List[str], limit: int = 3800) -> List[str]:
@@ -567,42 +599,46 @@ def track_record(panel: Dict[str, pd.DataFrame], path: Path, horizon: int = 20, 
             a = np.mean([x for x, _ in res]) * 100
             b = np.mean([y for _, y in res]) * 100
             beat = np.mean([x > y for x, y in res]) * 100
-            lines.append(f"{side} ideas ({len(res)} with {horizon} sessions since): average {a:+.1f}% vs Nifty ETF "
-                         f"{b:+.1f}%; {beat:.0f}% beat it.")
-    return ("Track record: " + " ".join(lines)) if lines else ""
+            span = "about a month" if horizon <= 25 else "about 3 months" if horizon <= 70 else f"{horizon} trading days"
+            if side == "BUY":
+                lines.append(f"• BUY ideas, {horizon} trading days ({span}) later ({len(res)} so far): average {a:+.1f}%, "
+                             f"while the Nifty 50 fund did {b:+.1f}%; {beat:.0f}% did better than the fund.")
+            else:
+                lines.append(f"• AVOID ideas, {horizon} trading days ({span}) later ({len(res)} so far): average "
+                             f"{a:+.1f}%, while the Nifty 50 fund did {b:+.1f}%; {100 - beat:.0f}% did worse than the "
+                             "fund (which is what an AVOID idea should do).")
+    return ("📈 How earlier ideas turned out:\n" + "\n".join(lines)) if lines else ""
 
 
 def track_records(panel: Dict[str, pd.DataFrame], path: Path, horizons=(20, 60)) -> str:
     """20 sessions (the tested horizon) and 60 (Addendum 15's untested observation, judged on new ideas only)."""
-    lines = [track_record(panel, path, h) for h in horizons]
-    return "\n".join(x for x in lines if x)
+    lines = [x for x in (track_record(panel, path, h) for h in horizons) if x]
+    return (lines[0] + "".join("\n" + x.split("\n", 1)[1] for x in lines[1:])) if lines else ""
 
 
 # ------------------------------------------------------------------ market valuation (Addendum 16: a fact, not a signal)
-def valuation_line(store: Path, today: date, update: bool = True) -> str:
+def valuation_line(today: date, update: bool = True, vdir: Optional[Path] = None) -> str:
     """The Nifty 50's P/E, P/B and dividend yield (niftyindices.com) and where each stands among its daily values
-    since 1999. Best effort: empty when the data cannot be had."""
-    vdir = store / "valuation"
+    since 1999 (trader/valuation.py). Best effort: empty when the data cannot be had."""
+    from . import valuation as V
+    vdir = Path(vdir or V.DIR)
     if update:
-        try:
-            DH, DN = _research()
-            DH.index_history(DN.Store(vdir), 1999, today.year, pepb=True)
-        except Exception as e:                                      # noqa: BLE001 - the report goes out regardless
-            log.warning("valuation history unavailable: %s", e)
-    p = vdir / "pepb.csv"
-    if not p.exists():
+        V.update(today, vdir)
+    v = V.load(vdir)
+    if v is None or len(v.dropna()) < 250:
         return ""
-    v = pd.read_csv(p)
-    v = v.assign(date=pd.to_datetime(v["date"])).drop_duplicates("date", keep="last").set_index("date").sort_index()
-    v = v[["pe", "pb", "div_yield"]].astype(float).dropna()
-    if len(v) < 250:
-        return ""
+    v = v.dropna()
     last = v.iloc[-1]
     pct = {k: int(round((v[k] <= last[k]).mean() * 100)) for k in v.columns}
-    return (f"Nifty 50 valuation ({v.index[-1]:%d %b}): P/E {last.pe:.1f} (above {pct['pe']}% of days since 1999), "
-            f"P/B {last.pb:.2f} (above {pct['pb']}%), dividend yield {last.div_yield:.2f}% (above {pct['div_yield']}%; "
-            "a higher yield = cheaper). Context only: in the 20-year test, timing the market on valuation "
-            + VALUATION_TESTED)
+    level = ("EXPENSIVE" if pct["div_yield"] <= 20 else "CHEAP" if pct["div_yield"] >= 80
+             else "NORMAL - neither cheap nor expensive")
+    return (f"💰 Are shares cheap or expensive right now? {level}.\n"
+            f"• Price compared with profit: the Nifty 50 companies cost {last.pe:.1f} times their yearly profit (the "
+            f"\"P/E ratio\"; lower = cheaper). That is more expensive than {pct['pe']}% of days since 1999.\n"
+            f"• Dividends: they pay {last.div_yield:.2f}% of their price to shareholders each year (higher = cheaper). "
+            f"That is more than on {pct['div_yield']}% of days since 1999.\n"
+            f"Your long-term portfolio uses the dividend reading ({v.index[-1]:%d %b}): among the most expensive 20% of "
+            "days it holds less Nifty 50 and more cash; among the cheapest 20%, more Nifty 50. " + VALUATION_TESTED)
 
 
 # ------------------------------------------------------------------ the job
@@ -640,7 +676,7 @@ def run(notify, client=None, today: Optional[date] = None, update: bool = True, 
             log.warning("holdings unavailable: %s", e)
     rep = screen(df, mkt, flags, holdings)
     track = track_records(panel, store / "ideas.csv")
-    val = valuation_line(store, today, update=update)
+    val = valuation_line(today, update=update)
     for m in compose(rep, flags, track, filings_window(store, today), val):
         notify(m)
     record(rep, store / "ideas.csv")

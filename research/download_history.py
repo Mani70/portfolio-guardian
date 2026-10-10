@@ -41,6 +41,10 @@ NI_URL = f"{NI_BASE}/getHistoricaldatatabletoString"
 NI_TRI_URL = f"{NI_BASE}/getTotalReturnIndexString"
 NI_PEPB_URL = f"{NI_BASE}/getpepbHistoricaldataDBtoString"   # Addendum 16: P/E, P/B, dividend yield
 NI_PEPB = ["NIFTY 50"]
+NI_FACTORS = ["NIFTY100 QUALITY 30", "NIFTY50 VALUE 20", "NIFTY100 LOW VOLATILITY 30", "NIFTY ALPHA LOW-VOLATILITY 30",
+              "NIFTY QUALITY LOW-VOLATILITY 30", "NIFTY200 QUALITY 30", "NIFTY MIDCAP150 QUALITY 50",
+              "NIFTY DIVIDEND OPPORTUNITIES 50", "NIFTY200 VALUE 30", "NIFTY500 QUALITY 50", "NIFTY500 VALUE 50",
+              "NIFTY 100", "NIFTY 500", "NIFTY MIDCAP 150"]     # Addendum 17 (NIFTY 50 / 200 are in NI_TRI)
 NI_TRI = ["NIFTY 50", "NIFTY NEXT 50", "NIFTY200 MOMENTUM 30", "NIFTY 200"]   # Addendum 13: dividends included
 NI_INDICES = ["NIFTY 50", "NIFTY NEXT 50", "NIFTY100 QUALITY 30", "NIFTY 100", "NIFTY100 LOW VOLATILITY 30",
               "NIFTY50 VALUE 20", "NIFTY200 MOMENTUM 30", "NIFTY MIDCAP 100", "NIFTY 1D RATE INDEX"]
@@ -195,7 +199,8 @@ def parse_pepb(rows) -> List[dict]:
     return out
 
 
-def index_history(store: Store, start_year: int, end_year: int, tri: bool = False, pepb: bool = False) -> None:
+def index_history(store: Store, start_year: int, end_year: int, tri: bool = False, pepb: bool = False,
+                  names: Optional[List[str]] = None) -> None:
     """Year-by-year history of the key indices from niftyindices.com (best effort: reported if refused): prices into
     index_history.csv, with tri=True total-return values into tri.csv, with pepb=True P/E, P/B and dividend yield
     into pepb.csv."""
@@ -212,10 +217,11 @@ def index_history(store: Store, start_year: int, end_year: int, tri: bool = Fals
     except Exception as e:                                       # noqa: BLE001
         print(f"niftyindices home page: {e}", flush=True)
     refused = 0
+    names_in = names
     src, url, out_file, names, parse = (("pepb", NI_PEPB_URL, "pepb.csv", NI_PEPB, parse_pepb) if pepb else
                                         ("tri", NI_TRI_URL, "tri.csv", NI_TRI, parse_tri) if tri else
                                         ("ni2", NI_URL, "index_history.csv", NI_INDICES, parse_niftyindices))
-    for name in names:
+    for name in (names_in or names):
         got = 0
         for y in range(start_year, end_year + 1):
             key = f"{src}:{name}:{y}"
@@ -297,6 +303,7 @@ def main(argv=None) -> int:
         index_history(store, start.year, end.year)
         index_history(store, start.year, end.year, tri=True)
         index_history(store, start.year, end.year, pepb=True)
+        index_history(store, start.year, end.year, tri=True, names=NI_FACTORS)
         return 0
     print(f"NSE history {start} -> {end} into {OUT} (stops at {a.stop_at or 'never'} IST)", flush=True)
     if not a.skip_index_history:

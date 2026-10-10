@@ -506,3 +506,126 @@ leverage, which this account cannot and should not use. Bonds instead of the liq
 Part 3 (done, measurement only): the daily report now (1) says it is a price-and-momentum screen that does not judge
 the business, (2) shows the Nifty 50's P/E, P/B and dividend yield with their percentile since 1999 and this test's
 result in one line, and (3) tracks its ideas over 20 and 60 sessions.
+
+## Addendum 16a: V1 adopted and replayed (8 Oct 2026)
+
+The owner adopted V1. Engine replay (research/replay_core.py --tilt: the real CoreAllocation with the rulebook's own
+tilt settings, Engine._allocate, risk checks, paper broker with real costs): A 15.77% / -43.9% (research 15.84% /
+-44.1%), B 15.31% / -27.4% (research 15.34% / -27.4%): within 1 point a year, as required. 304 orders over 20 years
+(L1: 168; the tilt's switches add about 7 trades a year in the years it acts). The yearly re-test now evaluates L1
+with the tilt: on data to Dec 2025 both tests pass (Sharpe 1.08 vs 0.70 and 1.47 vs 1.06; worst fall -44.1% vs
+-59.5%). Today (8 Oct 2026): dividend yield 1.22, above 33% of days since 1999 - neutral, no change to the mix.
+
+## Addendum 17: NSE quality / value / low-volatility indices, before and after launch (9 Oct 2026; pre-registered; research/factor_indices17.py)
+
+Total return, each index against its parent, the factor index charged 0.30 point a year more (an ETF on it costs more).
+
+| index (launched) | LIVE: excess a year, t | LIVE: worst fall vs parent | back-calculated: excess a year | verdict |
+|---|---|---|---|---|
+| Nifty100 Quality 30 (Mar 2015) | -1.47%, t -0.77 | -32.9% vs -37.9% | +4.32% | NO EDGE |
+| Nifty50 Value 20 (Mar 2014) | +0.88%, t +0.43 | -29.6% vs -38.3% | +6.47% | CONSISTENT, NOT PROVEN |
+| Nifty100 Low Volatility 30 (Jul 2016) | -0.11%, t -0.06 | -30.7% vs -37.9% | +2.94% | NO EDGE |
+| Nifty Alpha Low-Volatility 30 (Jul 2017) | -0.13%, t -0.05 | -31.0% vs -38.0% | +4.35% | NO EDGE |
+| Nifty Quality Low-Volatility 30 (Jul 2017) | -1.95%, t -0.75 | -29.4% vs -38.0% | +2.06% | NO EDGE |
+| Nifty200 Quality 30 (Apr 2018) | -1.51%, t -0.52 | -29.1% vs -38.0% | +3.90% | NO EDGE |
+| Nifty Midcap150 Quality 50 (Oct 2019) | **-7.44%, t -3.44** | -35.2% vs -38.5% | +2.43% | NO EDGE |
+| Nifty Dividend Opportunities 50 (Mar 2011) | -0.79%, t -0.45 | -35.9% vs -38.1% | +10.89% | NO EDGE |
+
+- **Every index looked better than its parent in its back-calculated years (+2 to +11 points a year) and none showed
+  an edge after launch.** Seven of eight returned less than the parent once live; the one positive (Value 20, +0.9 a
+  year) is indistinguishable from chance (t 0.43). The Midcap150 Quality index lagged by 7.4 points a year (t -3.4).
+  This is the size of the hindsight in a back-calculated history: the index designers' rules were chosen on data
+  whose outcome they knew.
+- What did survive launch: every quality, value and low-volatility index fell less than its parent in the worst
+  drawdown (by 2-9 points). Mechanical quality selection in India has delivered smaller falls, not higher returns.
+- Reported only (too little live history): Nifty200 Value 30 (+3.0% a year over 27 months, t 0.45), Nifty500
+  Quality 50 (-2.1% over 22 months).
+
+Outcome as pre-registered: nothing changes live. For Addendum 18: published quality and value screens, run by NSE
+with full company data, did not beat their universe after launch, so a company-level framework built on the same
+measures starts with a low prior; the defensible claim to test is smaller drawdowns as much as higher returns.
+
+## Addendum 19: a Midcap 150 sleeve in the live mix (9 Oct 2026; pre-registered; research/midcap19.py)
+
+| CAGR / worst fall / Sharpe over cash | A: 2006-2015 | B: 2016-2026 |
+|---|---|---|
+| Nifty 50 TRI held | 12.1% / -59.5% / 0.33 | 11.4% / -38.3% / 0.44 |
+| Midcap 150 held (minus 0.25%) | 13.5% / -73.0% / 0.39 | 16.4% / -43.4% / 0.67 |
+| V1 (live) | 15.84% / -44.1% / 0.57 | 15.34% / -27.4% / 0.84 |
+| **M10: Nifty 50 35 / Midcap 150 10 (rest as V1)** | **16.16% / -46.0% / 0.60** | **15.86% / -27.6% / 0.87** |
+| M15: Nifty 50 30 / Midcap 150 15 | 16.39% / -46.9% / 0.61 | 16.11% / -27.7% / 0.89 |
+
+- **M10 PASSES** its bar: Sharpe over cash higher than V1 in A (0.60 vs 0.57) and B (0.87 vs 0.84), worst fall 1.9
+  points deeper in A (bar: 2) and 0.2 in B, and the neighbour M15 also higher in both.
+- How strong: modest and consistent, +0.3 point a year in A and +0.5 in B. The price is a slightly deeper 2008
+  fall (-46% vs -44%): midcaps fell 73% then. M15 earns a little more for a little more fall; the bar was set on M10.
+- The ETF is a faithful vehicle: MID150BEES (NETFMID150 before May 2022) returned 18.97% a year from Feb 2019 against
+  the sleeve's 18.98% (index minus 0.25%); every calendar year within 0.4 point.
+- Outcome as pre-registered: a pass goes to the owner as a rulebook change; nothing changes until then.
+
+## Addendum 19a: M10 adopted and replayed (9 Oct 2026)
+
+Engine replay (research/replay_core.py --rulebook: the rulebook's own weights and tilt through the real engine): A
+16.03% / -46.1% (research 16.16% / -46.0%), B 15.82% / -27.6% (research 15.86% / -27.6%): within 1 point a year.
+Yearly re-test on data to Dec 2025, the new rule: test 1 Sharpe 1.11 vs 0.70, worst fall -46.0% vs -59.5% (pass);
+test 2 Sharpe 1.52 vs 1.06 (pass).
+
+## Addendum 18: the owner's 7-pillar framework, scored blind from NSE filings (9 Oct 2026; pre-registered; research/framework18.py)
+
+Data: 15,691 company-years of annual results (FY2005-FY2025, standalone, as filed) for the 1,272 companies that were
+among NSE's 500 most traded in any July 2008-2025 (survivorship-free: Satyam, Kingfisher, DHFL included); 99% with
+revenue and profit. Gaps: about 5% of company-years (mostly FY2005-FY2017) whose documents NSE no longer serves; a
+re-download confirmed them missing. On each decision date 431-489 of the 500 had a recent enough result; 87%
+qualified. Code check: a smoke test on the first 40 companies found that a missing reserves figure disqualified a
+company as "zero net worth", against the written rule; fixed before the full run.
+
+| CAGR / worst fall / Sharpe over cash | A: Jul 2008 - Jul 2016 | B: Jul 2016 - Oct 2026 |
+|---|---|---|
+| Universe: all 500, equal weights (no costs) | 8.4% / -57.3% / 0.19 | 14.6% / -59.6% / 0.55 |
+| **Framework: top 20 qualified, after costs** | **12.3% / -57.7% / 0.34** | **11.4% / -68.5% / 0.39** |
+| Nifty 500 TRI (with dividends) | 12.3% / -46.6% / 0.36 | 13.1% / -38.1% / 0.54 |
+
+Verdicts against the pre-registered bars:
+- **Portfolio beats the universe: FAIL.** It did in A (+3.9 points a year) and not in B (-3.1 points, and a deeper
+  fall: -68.5% vs -59.6%, Jan 2018 - Mar 2020, the small- and midcap bear market). It never beat the Nifty 500 index.
+- **Score ranks next year's returns: PASS.** Rank correlation +0.09 on average over 17 years, t 4.1, positive in A
+  (+0.13) and B (+0.05); negative in 2020 and 2021 and fading since. The score does sort companies a little, but
+  the effect is small, it has weakened, and 20 stocks do not capture it reliably.
+- **Finds multibaggers: FAIL.** Top fifth by score went 3x in 5 years 15.8% of the time vs 14.6% for everyone (x1.08)
+  in A, 23.5% vs 25.1% (x0.94) in B. 78-81% of the 3x stocks were outside the top fifth.
+
+Named companies (rank among ~450 scored; next 12 months; 5 years):
+- Titan and Asian Paints sat in the middle every year (#90-#330): high returns on equity, but always "expensive",
+  so the valuation pillar held them back during their 4-5x runs. Both missed.
+- Eicher Motors ranked #241-#389 in 2008-2011, its 15-25x years; it reached #39-#86 in 2012-2016, after most of the
+  run, and gave flat 5-year returns from 2015-2017. Missed, then late.
+- Bajaj Finance ranked #80-#344 through its 10-16x run (2010-2016). Missed.
+- HDFC Bank ranked #22-#125 every year (steady, a fair call); Infosys mostly in the top 70.
+- Satyam ranked #20 in Jul 2008 (bought: -79% in a year) and #1 in Jul 2009 on its falsified FY2008 accounts. The
+  filings cannot reveal fraud.
+- DHFL ranked #1-#26 from 2013 to 2018 (+151% in its first year, then bought in 2018: -92%). Yes Bank ranked #24-#77
+  from 2011 to 2016 and #77-#122 in 2018-2019, as the bank was failing. Lenders' asset quality (bad loans,
+  related-party lending) is not in profit-and-loss numbers; the framework rated growing lenders highly to the end.
+- Kingfisher Airlines: disqualified every year (losses, negative net worth). The disqualifiers did their job here.
+- False positives: 11 of 340 top-20 picks lost half or more in a year (Satyam 2008, Vedanta 2008, Rolta 2008, OnMobile
+  2011, Everonn, Geodesic, Glodyne 2012, PFS 2017, Graphite 2018, DHFL 2018, Hindustan Oil 2019).
+- Missed winners: 602 company-dates in the bottom half went 3x in 5 years (e.g. Eicher 2009-10, Bajaj Finance,
+  CG Power 2019, Adani Green 2019, Titagarh 2019, Tata Motors DVR 2020).
+
+Sensitivity (not judged, exploratory; one pillar at a time can be noise):
+- Equal pillar weights, or dropping any one pillar, does not rescue B consistently; the top-N choice swings B from
+  8.4% (top 10) to 15.5% (top 30), so no portfolio size is reliable.
+- Valuation alone is the most unstable: -12.7% a year in A, +22.3% in B (cheap stocks crashed in 2008-2013, then
+  boomed). Moat measured as high ROE alone was weak in both periods (2.1%, 8.8%).
+- Financial strength, governance and downside resilience alone each gave smaller worst falls (-28% to -58%) and a
+  Sharpe near or above the universe in both periods: the defensive pillars did their defensive job.
+
+What this means for the framework (retain / revise / reject before using it on today's market):
+- Retain: the disqualifiers (losses, negative net worth, weak interest cover), the governance, balance-sheet and
+  resilience measures as risk filters, and the blind, dated method itself.
+- Revise: lenders need their own measures (gross and net NPA, capital adequacy, loan growth versus deposits); cash
+  conversion and related-party checks need cash-flow statements (in results only from FY2020). Without them the
+  framework repeats DHFL, Yes Bank and Satyam.
+- Reject: using the score to pick a concentrated 20-stock portfolio or to hunt multibaggers. Measured blind, it found
+  them no better than chance; the famous winners were mid-ranked or caught late.
+- Outcome as pre-registered: nothing goes to Telegram or paper; real money stays on the rulebook.

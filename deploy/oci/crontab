@@ -17,6 +17,8 @@ PG=__APP__/deploy/oci/job.sh
 37   8  *   *   1    $PG holidays      # Mondays: NSE trading holidays (month-end = real last session)
 30  19  *   *   1-5  $PG insights      # swing ideas with reasons -> Telegram (information only, never traded)
 30  21  *   *   1-5  $PG insights      # again if NSE's files were late (sends once a day)
+15  20  *   *   1-5  $PG fo-paper      # F&O practice run on paper (Addenda 20/20a; never an order)
+45  22  *   *   1-5  $PG fo-paper      # again if NSE's F&O file was late (reports once a day)
 15  17  *   *   1-5  $PG autodeploy    # GitHub main -> server, only if all tests pass (Telegram either way)
 5    6  *   1   6    $PG retest        # Saturdays in January: the autopilot's yearly re-test (runs once a year)
 # The 15:50 portfolio-rule check (guardian, config.yaml) is off since the holdings went to the bot; the

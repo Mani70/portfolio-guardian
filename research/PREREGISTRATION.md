@@ -532,3 +532,225 @@ earnings, pledges) are not available for 2006-2026, so no fundamental claim is a
 report's own track record adds the 60-session result beside the 20-session one (Addendum 15's untested observation is
 judged on ideas published from now on), and the header shows the Nifty 50's P/E, P/B and dividend yield with their
 percentile since 1999 (a fact, not a signal).
+
+## Addendum 16a (8 Oct 2026): the owner adopts V1; how it runs live
+
+Decision: the owner adopted V1 (Addendum 16) on 8 Oct 2026. Rule L1 in trader/rulebook.yaml gains the valuation tilt;
+its weights, bands, year-end rebalance and the fallback F (no tilt) are unchanged.
+- Data: the Nifty 50's daily dividend yield from niftyindices.com (cache/valuation/pepb.csv on the server, refreshed
+  before each evening plan and by the insights job; the yearly re-test downloads its own copy).
+- The regime is read at the month's review: the latest dividend yield on or before the anchor day (the review's
+  session if it is the month's last; otherwise the previous month's last day), its percentile among all daily values
+  since Jan 1999 up to that day. At the 16:10 run the day's own value is not out yet, so the previous session's is used.
+  Between reviews (cash sweeps, a review left open) the same anchor gives the same regime.
+- Expensive (percentile <= 20): NIFTYBEES 30, LIQUIDCASE 25. Cheap (>= 80): NIFTYBEES 55, LIQUIDCASE 0. Otherwise
+  L1. A switch is an ordinary rebalance (15 points is beyond the 5-point band).
+- No data, or the latest value more than 10 days older than the anchor: L1's own weights (no tilt), and the evening
+  message says so. The tilt never trades on a guess.
+- The yearly re-test (Addendum 14) evaluates L1 with the tilt (research/allweather16.py's V1), same tests, same
+  benchmark, same Sharpe definition as Addendum 14 (Addendum 16 found the verdicts identical on either definition).
+- Before going live, the engine replay (research/replay_core.py) must match V1's research numbers within 1 point a
+  year in A and B, as Addendum 13 required of L1.
+
+## Addendum 17 (9 Oct 2026, before any return is downloaded): do NSE's quality / value / low-volatility indices add anything?
+
+Why: the owner's "investment framework" asks whether Buffett / Graham-style company selection works in India. NSE
+publishes indices that select companies mechanically on such rules (quality: ROE, debt/equity, earnings stability;
+value: earnings yield, book-to-price, dividend yield; low volatility). They are a blind test only AFTER each index's
+launch: the years before it were back-calculated by people who already knew the outcome.
+
+Indices (launch date from each index's NSE factsheet; benchmark = its parent universe, total return, niftyindices.com):
+| index | launched | benchmark |
+|---|---|---|
+| Nifty100 Quality 30 | 19 Mar 2015 | Nifty 100 |
+| Nifty50 Value 20 | 28 Mar 2014 | Nifty 50 |
+| Nifty100 Low Volatility 30 | 8 Jul 2016 | Nifty 100 |
+| Nifty Alpha Low-Volatility 30 | 10 Jul 2017 | Nifty 200 |
+| Nifty Quality Low-Volatility 30 | 10 Jul 2017 | Nifty 200 |
+| Nifty200 Quality 30 | 17 Apr 2018 | Nifty 200 |
+| Nifty Midcap150 Quality 50 | 24 Oct 2019 | Nifty Midcap 150 |
+| Nifty Dividend Opportunities 50 | 22 Mar 2011 | Nifty 500 |
+Reported only (launched 2024, or launch date not found: too little live history): Nifty200 Value 30, Nifty500 Quality
+50, Nifty500 Value 50.
+
+Method (research/factor_indices17.py): daily total-return values; live period = the first month-end after launch to
+the last month-end available. CAGR, worst fall, Sharpe over cash (the liquid sleeve of research/allocation20.py), and
+monthly excess returns over the benchmark: annualised mean and t = mean / sd x sqrt(months). An ETF on a factor index
+costs more than a broad one, so 0.30 point a year is taken off the factor index before the excess is judged.
+
+Verdict per index (live period only):
+- EDGE SHOWN: excess after the 0.30-point cost > 0, t >= 2, and Sharpe over cash above the benchmark's.
+- CONSISTENT, NOT PROVEN: excess > 0 but t < 2.
+- NO EDGE: excess <= 0.
+The back-calculated years are reported beside, labelled as such, and judge nothing.
+
+What changes: nothing live (Addendum 14: a live rule needs 20 years of blind evidence, and these have 7-15). The result
+goes to the owner and steers Addendum 18 (the company-level test): pillars whose index shows no edge are not expected
+to carry much weight there either.
+
+## Addendum 18 (9 Oct 2026, before any company result is downloaded): the owner's investment framework, scored blind
+
+The owner's framework ("Indian Equity Investment Framework - Historical Validation") weights seven pillars: business
+economics and moat 20, growth runway 15, financial strength and cash conversion 15, management and governance 15,
+valuation and margin of safety 20, growth inflection and catalysts 10, downside resilience 5. The weights are the
+owner's, taken as given (hypotheses, never fitted). Each pillar is measured ONLY with numbers a company had filed on NSE
+before the decision date, so the score is computed by code and cannot use hindsight.
+
+Why no hand-written memos: the analyst (Claude) knows how Titan, Satyam, Yes Bank and the rest turned out; a memo
+"as of 2008" would be contaminated. The named companies are reported as checkpoints of the mechanical score instead.
+
+Data (research/fundamentals18.py): NSE's own filing records (www.nseindia.com/api/corporates-financial-results, annual,
+standalone), with the date each was filed; the result itself from NSE's archive pages (FY2005-FY2017) and XBRL files
+(FY2018 on, the full-year context). Prices: the bhavcopy panel of Addendum 12, corporate actions applied. Dividends
+paid: the dividend rows of NSE's corporate-action files (from 2010). A result counts from the session after it was
+filed; FY2005-FY2006 results (no filing date on NSE) count from 1 Jul 2007.
+
+Decision dates: 15 July (or the next session) each year 2008-2025: the March year's audited results are due by the
+end of May. Universe on each date: the 500 most traded EQ stocks (median daily value, 126 sessions; 252 sessions of
+history; ETFs excluded), from the bhavcopy, so failed and delisted companies are in it. A company enters the scoring
+only with an annual result for a year ending within the last 16 months.
+
+Measures (each turned into a percentile among the scored companies that day; a pillar = the mean of its measures'
+percentiles; a missing pillar counts 50; the score = the weighted sum, 0-100):
+1. Business economics (20): return on equity (profit / (paid-up capital + reserves)), mean of the last 3 years
+   (at least 2); its stability (minus the standard deviation of ROE over up to 5 years); non-financials also the
+   operating margin ((profit before tax + interest) / revenue), mean of 3 years.
+2. Growth runway (15): revenue growth a year over up to 3 years (at least 2); profit growth over the same span (a
+   loss at either end ranks last). Market size and share cannot be measured from filings: not scored.
+3. Financial strength (15): non-financials: interest cover ((profit before tax + interest) / interest, capped at 50;
+   no interest = 50). Financials: not measurable (no balance sheet in the results before 2016): pillar left out and
+   the other weights scaled up. Cash conversion: cash-flow statements are in results only from FY2020: not scored.
+4. Management and governance (15): share count growth over 3 years (dilution; lower is better); days from the year's
+   end to the filing of its results (lower is better); a dividend paid in the 12 months before the date (yes ranks
+   above no). Promoter pledges are in the results only for some years: not scored.
+5. Valuation (20): earnings yield (last year's EPS / price) and book-to-price (book value per share / price) at the
+   decision date's close.
+6. Growth inflection (10): last year's revenue growth minus the 3-year rate; last year's profit growth.
+7. Downside resilience (5): loss years among the last 5 (fewer is better); price volatility over the last year
+   (lower is better).
+Financial companies: NSE's bank format, or interest cost at least 35% of revenue (lenders) - their margin is profit /
+revenue and pillar 3 is left out.
+Disqualified (never bought, still scored and reported): a loss in the last year; negative or zero net worth;
+non-financial interest cover below 1.5; latest annual result older than 16 months.
+
+Portfolio rule: on each decision date the 20 highest-scoring qualified companies, equal weights, bought at the next
+session's close and held a year (then the next date's 20); a company that stops trading is sold at its last close;
+delivery costs (backtest Costs, ₹1 lakh a position, 0.05% slippage a side). Prices only, no dividends, on both sides.
+
+Pass bars (A = decisions 2008-2015, B = 2016-2025; the weights are not fitted, so both are out of sample):
+- Portfolio: after costs, CAGR AND Sharpe over cash above the equal-weighted universe (all 500, before costs) in A
+  and in B.
+- Ranking: the yearly rank correlation between the score and the next 12 months' return, averaged over the 18 years,
+  t >= 2, and positive on average in both A and B.
+- Multibaggers: among the top fifth by score, the share that went up 3x or more within 5 years at least 1.5 times
+  the universe's share, in A and in B (B: decisions to 2021).
+Reported without a bar: worst falls; the Nifty 500 total-return index (it includes dividends, the portfolio does not);
+sensitivity (equal pillar weights; each pillar left out; 10 / 30 / 50 stocks; two-year holds); the named companies'
+score and rank on every date they were in the universe (Titan, Asian Paints, Eicher Motors, Infosys, HDFC Bank, Bajaj
+Finance, Satyam, Yes Bank, DHFL, Kingfisher Airlines); the false positives (top-20 picks that lost half their value)
+and missed winners (3x in 5 years from the bottom half).
+
+What changes: a pass goes to the owner (Telegram long-term ideas, a paper portfolio first; Addendum 14 keeps real money
+on the rulebook). A fail is reported as plainly, with which pillars carried signal and which did not.
+
+## Addendum 18a (9 Oct 2026, after checking the parser on 4 companies, before any scoring or outcome): data handling
+
+Found while checking the parser (Titan, Yes Bank, Bajaj Finance, Satyam), fixed before anything is scored:
+- Unit slips in companies' own filings (e.g. Bajaj Finance's reserves filed in crore on a lakh form): an amount more
+  than 50 times smaller or larger than the median of the same company's other years is treated as missing. A profit
+  before tax of exactly 0 with a non-zero net profit (a misread bank form) is missing. Reserves of 0 = not given.
+- Share counts change with splits and bonuses, so per-share numbers are not used across years. Valuation instead:
+  market value at the result's filing = shares in the result (paid-up capital / face value) x that day's actual
+  close; moved to the decision date by the adjusted price return. Earnings yield = profit / that value; book-to-price
+  = (paid-up capital + reserves) / that value.
+- Dilution: shares now / shares 3 years earlier, corrected by NSE's official bonus and split factors between the two
+  filings (available from 2010; before that the measure is missing and the pillar uses its other measures).
+- A year's result whose document NSE no longer serves (e.g. Yes Bank FY2018, Bajaj Finance FY2019) is missing; the
+  measures use the years that exist.
+
+## Addendum 19 (9 Oct 2026, before any of it runs): a midcap sleeve in the live mix
+
+Owner's question: why mostly large caps? The Addendum 13 candidates never included midcaps; this tests one.
+Live rule today: V1 (L1 with the Addendum 16 valuation tilt).
+
+- M10: Nifty 50 35 / Next 50 15 / Midcap 150 10 / MON100 20 / gold 10 / liquid 10 (equity stays 80%), with the same
+  valuation tilt on the Nifty 50 sleeve (expensive: Nifty 50 20, liquid 25; cheap: Nifty 50 45, liquid 0).
+- Neighbour M15: Midcap 150 15, Nifty 50 30 (tilt: 15 / 45 ... the same 15-point shift; cheap: 40, liquid 0).
+- Midcap sleeve: the Nifty Midcap 150 total-return index minus 0.25% a year (MID150BEES, Nippon India, about
+  ₹17 crore traded a day; its expense ratio rounded up). Its own price history (NETFMID150 from 2020, MID150BEES
+  from 2022) is compared with the sleeve to report the tracking difference. The index's early years are calculated
+  backwards, but by a plain market-cap rule (ranks 101-250), not one picked for its results.
+- research/allocation20.py's simulation, costs, 5-point bands and year-end rebalance; Sharpe over cash
+  (Addendum 16); A = 2006-2015, B = 2016-2026.
+- M10 replaces V1 only if its Sharpe over cash is higher than V1's in A AND B, its worst fall is no more than 2
+  points deeper in either (Addendum 13's L2 bar), and M15 also has a higher Sharpe than V1 in A and B. A pass goes
+  to the owner as a rulebook change; the yearly re-test would then evaluate the new mix.
+
+## Addendum 19a (9 Oct 2026): the owner adopts M10
+
+Rule L1 in trader/rulebook.yaml becomes M10: NIFTYBEES 35 / JUNIORBEES 15 / MID150BEES 10 / MON100 20 / GOLDBEES 10 /
+LIQUIDCASE 10, bands and year-end unchanged; the valuation tilt moves the same 15 points (expensive: NIFTYBEES 20,
+LIQUIDCASE 25; cheap: NIFTYBEES 45, LIQUIDCASE 0). The rule keeps its name L1 (the autopilot's state refers to it).
+Fallback F unchanged. The yearly re-test evaluates the rulebook's own weights and tilt (research/midcap19.py
+rulebook_fn), same tests and benchmark. Before going live the engine replay must match M10's research numbers within
+1 point a year in A and B. The switch itself is an ordinary rebalance at the next review (the Nifty 50 holding is 10
+points over its new target, beyond the 5-point band).
+
+## Addendum 20 (10 Oct 2026, before any F&O data is downloaded): index options, tested on 14 years, then on paper
+
+Owner's request: research F&O and run it on paper for 3-4 weeks before anything else. Context: SEBI's study (Sept
+2024) found 93% of individual F&O traders lost money in FY22-FY24. A Nifty lot today is 65 units, about ₹14.6 lakh of
+index exposure, almost 4 times this account (₹3.84 lakh), so only defined-risk positions (where the most that can be
+lost is known when the trade is placed) are considered; buying or selling futures, and selling options without a
+protective option, are excluded.
+
+Why 3-4 weeks of paper cannot decide anything: that is one monthly cycle. Option-selling strategies win most months
+and lose rarely but heavily, so a few good paper weeks prove nothing. The evidence is the 14-year test below; the paper
+run checks the mechanics (strike choice, prices, costs, margin, messages) on live data.
+
+Data (research/fo20.py): NSE's daily F&O files, Jan 2012 - Oct 2026 (the old fo...bhav.csv files to Jul 2024, then the
+UDiFF files), Nifty index options and futures only. Prices: the day's close of each option; only strikes that traded
+that day can be chosen (the nearest traded strike to the target). Expiry: the option is worth its intrinsic value at
+the Nifty 50's close on expiry day (NSE's final settlement).
+
+Monthly cycle: each position is opened at the close of the first session after a monthly expiry, in the next monthly
+expiry, and held to expiry (no stop, no adjustment), so months never overlap.
+- S1, bull put spread: sell the put 3% below the Nifty, buy the put 6% below. Most that can be lost: the gap between
+  the strikes minus the premium received.
+- S2, iron condor: sell puts 4% below and calls 4% above, buy puts 7% below and calls 7% above.
+- S3, crash insurance: the Nifty held, plus a put 5% below bought every month; against the Nifty held.
+- S4, trend option buying (the common retail approach): if the Nifty is above its 200-day average buy the call at the
+  current level (at-the-money), else the put; held to expiry.
+Neighbours: S1 with 2%/5% and 4%/7%; S2 with 3%/6% and 5%/8%. Weekly versions of S1 and S2 (weekly expiries, 2019 on)
+are reported without a bar.
+
+Costs on every leg: ₹20 brokerage an order; STT 0.0625% of the premium on option sales to Sep 2024 and 0.1% after, and
+0.125% of the settlement value on bought options that expire in the money; exchange charges 0.05% of the premium;
+stamp duty 0.003% on purchases; SEBI fee ₹10 a crore; GST 18% on brokerage, exchange and SEBI fees; slippage
+max(₹1, 2% of the premium) a unit on every leg.
+
+Measured per lot of 65 units (today's size, so rupee results are comparable across years) on a ₹3.84 lakh account
+holding one position at a time, the rest earning the liquid fund's rate. Periods: A = Feb 2012 - Dec 2018,
+B = Jan 2019 - Sep 2026.
+
+Pass bars (S1, S2, S4), in A AND in B:
+- an edge: mean monthly profit after all costs above zero with t >= 2 (months are independent here);
+- survivable: the account's worst fall at most 25%, and no single month losing more than 10% of the account;
+- worth it: the account's yearly return at least 2 points above the liquid fund alone;
+- S1 and S2 only: both neighbours also profitable on average in A and B.
+S3 passes if, in A and B, the insured Nifty has a higher Sharpe over cash than the Nifty held and a worst fall at
+least 10 points smaller.
+
+What changes: every strategy runs on paper for 3-4 weeks from the next monthly expiry, with a plain-language Telegram
+report each evening (position, value, profit or loss, what happens next). Real money only for a strategy that passed
+here, one lot, defined risk, and only on the owner's decision after the paper run.
+
+## Addendum 20a (10 Oct 2026, before the paper run and before any F&O result): what the paper run trades
+
+The monthly strategies open at the first session after a monthly expiry (late October 2026) and expire about four
+weeks later, so a 3-4 week paper run sees one monthly cycle opened and valued daily, not settled. To see complete
+cycles, the paper run also trades the weekly versions of S1 and S2 (opened the session after each weekly expiry,
+held to the next). Paper prices are NSE's closing prices from the day's F&O file (published each evening), the same
+prices and cost model as the test; the paper run reports, for each position, what it would be worth if closed at
+today's close. Nothing in the paper run changes a verdict: the 14-year test decides, the paper run checks the
+mechanics.

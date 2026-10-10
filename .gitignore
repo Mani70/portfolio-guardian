@@ -21,3 +21,5 @@ research/data/hist/
 .token_cache.json.*
 *.before-handover
 research/data/nse/
+research/data/fund/
+research/data/fo/

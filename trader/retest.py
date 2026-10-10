@@ -3,8 +3,9 @@
   python -m trader.run retest            # January (scheduled: Saturdays in January, once a year)
   python -m trader.run retest --force    # any time, e.g. to see where the tests stand (still applies the rule)
 
-Updates the research data (NSE bhavcopy, corporate actions, niftyindices total-return and 1D-rate histories) up to
-the last session of December, re-runs the Addendum 13 simulation unchanged, and applies the pre-registered rule:
+Updates the research data (NSE bhavcopy, corporate actions, niftyindices total-return, 1D-rate and valuation histories)
+up to the last session of December, re-runs the Addendum 13 simulation (L1 with its Addendum 16a valuation tilt),
+and applies the pre-registered rule:
   test 1 (Jan 2006 to the end): L1's Sharpe above the Nifty 50 TRI's AND its worst fall shallower;
   test 2 (the last 5 calendar years): L1's Sharpe above the Nifty 50 TRI's.
   F when test 1 fails, or test 2 fails in two consecutive re-tests; back to L1 when both pass.
@@ -45,8 +46,9 @@ def last_december_session(rets: pd.DataFrame, year: int) -> Optional[pd.Timestam
     return idx[-1] if len(idx) else None
 
 
-def evaluate(hist: Path, year: int) -> dict:
-    """The Addendum 13 simulation, unchanged, on data to the last session of December `year`."""
+def evaluate(hist: Path, year: int, rule_params: Optional[dict] = None) -> dict:
+    """The Addendum 13 simulation on data to the last session of December `year`, for the rulebook's rule L1 as it
+    stands (rule_params: its weights and valuation tilt, Addenda 16a/19a); None = Addendum 13's original L1."""
     root = Path(__file__).resolve().parent.parent
     sys.path.insert(0, str(root / "research"))
     import allocation20 as A                                     # noqa: E402 - research code, loaded on demand
@@ -58,7 +60,17 @@ def evaluate(hist: Path, year: int) -> dict:
     rets = rets.loc[:end]
     start = pd.Timestamp("2005-12-01")
     bench = A.simulate(rets, A.hold_one("N50"), start)["equity"]
-    l1 = A.simulate(rets, A.fixed_mix(rets, A.L1), start)["equity"]
+    if rule_params:                                              # Addendum 19a: the rulebook's own weights and tilt
+        import allweather16 as W                                 # noqa: E402
+        import midcap19 as M                                     # noqa: E402
+        rets = M.add_mid(rets, hist)
+        val = W.valuation(hist) if rule_params.get("valuation") else None
+        if val is not None and val.index[-1] < end - pd.Timedelta(days=10):
+            raise RuntimeError(f"the valuation data does not reach the end of December {year}")
+        rule = M.rulebook_fn(rets, val.loc[:end] if val is not None else None, rule_params)
+    else:
+        rule = A.fixed_mix(rets, A.L1)
+    l1 = A.simulate(rets, rule, start)["equity"]
     out = {"end": f"{end:%Y-%m-%d}"}
     for tag, lo in (("full", pd.Timestamp("2006-01-01")), ("last5", pd.Timestamp(f"{year - 4}-01-01"))):
         b, x = bench.loc[lo:], l1.loc[lo:]
@@ -89,7 +101,8 @@ def run(root: Path, notify=None, update: bool = True, force: bool = False, today
     try:
         if update:
             update_data(root)
-        res = evaluate(root / "research" / "data" / "hist", year)
+        from .autopilot import rulebook
+        res = evaluate(root / "research" / "data" / "hist", year, (rulebook(root).get("rules") or {}).get("L1"))
     except Exception as e:                                       # noqa: BLE001 - no data, no change
         msg = f"Autopilot re-test for {year} could not run ({str(e)[:200]}). Nothing changed: rule " \
               f"{state.get('active') or 'L1'} stays."
@@ -104,13 +117,18 @@ def run(root: Path, notify=None, update: bool = True, force: bool = False, today
                  last_retest={"year": year, "date": now_iso_date(), "decision": why, **res})
     state.setdefault("history", []).append({"year": year, "rule": rule, "test1": res["test1"], "test2": res["test2"]})
     save_state(root, state)
-    msg = (f"Autopilot re-test for {year} (data to {res['end']}):\n"
-           f"test 1, 2006-{year}: Sharpe L1 {f['l1_sharpe']:.2f} vs Nifty 50 {f['bench_sharpe']:.2f}, worst fall "
-           f"{f['l1_fall']:.1f}% vs {f['bench_fall']:.1f}% -> {'pass' if res['test1'] else 'FAIL'}\n"
-           f"test 2, {year - 4}-{year}: Sharpe {l5['l1_sharpe']:.2f} vs {l5['bench_sharpe']:.2f} -> "
-           f"{'pass' if res['test2'] else 'FAIL'}\n"
-           f"Decision: {why}." + (f" The core moves from {before} to {rule} at the next evening run (an ordinary "
-                                  "rebalance)." if rule != before else ""))
+    names = {"L1": "your long-term mix (rule L1)", "F": "the safer fallback mix (rule F: Nifty 50 fund and cash)"}
+    msg = (f"📅 Yearly check of your investing rules (prices up to {res['end']})\n"
+           "Each year the bot re-runs its rules on all market history to make sure they still work. 'Score' below "
+           "means return earned per unit of up-and-down movement (higher is better).\n"
+           f"• Check 1, everything since 2006: score {f['l1_sharpe']:.2f} vs {f['bench_sharpe']:.2f} for simply holding "
+           f"the Nifty 50, worst fall {f['l1_fall']:.0f}% vs {f['bench_fall']:.0f}% -> "
+           f"{'PASS' if res['test1'] else 'FAIL'}\n"
+           f"• Check 2, the last 5 years ({year - 4}-{year}): score {l5['l1_sharpe']:.2f} vs {l5['bench_sharpe']:.2f} -> "
+           f"{'PASS' if res['test2'] else 'FAIL'}\n"
+           f"Decision: {why}. Now using {names.get(rule, rule)}."
+           + (f" The switch from {names.get(before, before)} happens at the next evening run, as an ordinary "
+              "rebalance." if rule != before else ""))
     if notify:
         notify(msg)
     return msg

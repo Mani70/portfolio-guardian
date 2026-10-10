@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-JOBS = ["intraday", "watch", "swing-check", "swing-plan", "backup", "universe", "holidays", "autodeploy", "insights"]
+JOBS = ["intraday", "watch", "swing-check", "swing-plan", "backup", "universe", "holidays", "autodeploy", "insights", "fo-paper"]
 END = re.compile(r"^===== (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) end (\S+) rc=(\d+)")
 
 
@@ -84,7 +84,7 @@ def funds_line(cfg, client, ok, warn) -> None:
         from trader.risk import Risk
         free = IndStocksBroker(client).available_funds(CNC)
         if free is None:
-            warn.append("could not read INDstocks funds")
+            warn.append("Could not read the cash in your INDstocks account today.")
             return
         from trader.gates import is_demoted, paper_gate
         from trader.strategies import build
@@ -103,17 +103,20 @@ def funds_line(cfg, client, ok, warn) -> None:
             j.close()
         reserve = float(cfg["capital"].get("reserve", 0) or 0)
         usable = max(0.0, free - reserve) / 1.03 + invested
-        line = f"funds free ₹{free:,.0f}" + (f" (₹{reserve:,.0f} kept aside)" if reserve else "") + \
-            f"; live plan ₹{plan:,.0f}, ₹{invested:,.0f} invested"
+        from trader.plain import rupees
+        line = (f"Cash in your INDstocks account: {rupees(free)}"
+                + (f" ({rupees(reserve)} of it is always kept aside, never invested)" if reserve else "")
+                + f". Invested by the bot so far: {rupees(invested)}.")
         if plan and usable < plan * 0.95:
             if cfg["capital"].get("live_from_account", True):
-                warn.append(line + f" - live trades sized to the money available (~{usable / plan:.0%} of plan)")
+                warn.append(line + f" Its plan needs {rupees(plan)}, so it sizes purchases to the money available "
+                                   f"(about {usable / plan:.0%} of the plan).")
             else:
-                warn.append(line + " - orders will be cut down to the money available")
+                warn.append(line + f" Its plan needs {rupees(plan)}; orders will be cut down to the money available.")
         else:
             ok.append(line)
     except Exception as e:                                    # noqa: BLE001
-        warn.append(f"funds check failed: {str(e)[:120]}")
+        warn.append(f"Could not check the cash in your account ({str(e)[:120]})")
 
 
 def holdings_line(cfg, client, ok, warn, holdings=None) -> None:
@@ -131,13 +134,14 @@ def holdings_line(cfg, client, ok, warn, holdings=None) -> None:
             return
         bad = check(pos, holdings if holdings is not None else client.holdings())
         if bad:
-            warn.append("HOLDINGS MISMATCH: " + "; ".join(f"{s} bot {q} vs account {h}" for s, q, h in bad)
-                        + " - sold by hand, or the company merged/delisted? run: "
+            warn.append("Your account and the bot disagree about what you own: "
+                        + "; ".join(f"{s}: bot thinks {q}, account has {h}" for s, q, h in bad)
+                        + ". Was something sold by hand, or did a company merge? To fix the bot's records run: "
                           ".venv/bin/python -m trader.run reconcile --fix")
         else:
-            ok.append("holdings match: " + ", ".join(f"{p.symbol} {p.qty}" for p in pos))
+            ok.append("Your holdings match the bot's records ✓: " + ", ".join(f"{p.symbol} {p.qty:g}" for p in pos))
     except Exception as e:                                    # noqa: BLE001
-        warn.append(f"holdings check failed: {str(e)[:120]}")
+        warn.append(f"Could not compare your holdings with the bot's records ({str(e)[:120]})")
 
 
 def new_holdings_line(cfg, holdings, warn, state: Path | None = None) -> None:
@@ -180,9 +184,10 @@ def new_holdings_line(cfg, holdings, warn, state: Path | None = None) -> None:
             return                                            # first run: remember what is there
         new = sorted(k for k in now if k not in prev and names[k] not in prev and k not in bot and names[k] not in bot)
         if new:
-            warn.append("NEW HOLDING not bought by the bot: " + ", ".join(f"{names[k]} {now[k]}" for k in new)
-                        + " - shares from a demerger, a rights issue, an IPO allotment, or your own buy? "
-                          "The bot does not manage them; the decision is yours.")
+            warn.append("New shares in your account that the bot did not buy: " + ", ".join(f"{names[k]} {now[k]}"
+                                                                                           for k in new)
+                        + ". They may come from a company split-up (demerger), a rights issue, an IPO, or your own "
+                          "purchase. The bot does not manage them; what to do with them is your decision.")
     except Exception as e:                                    # noqa: BLE001
         warn.append(f"new-holdings check failed: {str(e)[:120]}")
 
@@ -194,17 +199,18 @@ def main(argv) -> int:
         load_secrets(ROOT)
     except ImportError:
         pass
-    ok, warn = [], []
+    ok, warn, tech = [], [], []
     try:
         from guardian.secrets import SOURCE_VAR, dotenv_secrets
         src = os.environ.get(SOURCE_VAR, "env")
         if "FAILED" in src:
-            warn.append(f"secrets: {src} - check the Vault policy / dynamic group")
+            warn.append(f"Could not read the bot's passwords from the Oracle vault ({src}): check the Vault policy.")
         elif src.startswith("vault"):
-            ok.append("secrets from OCI Vault")
+            tech.append("passwords in Oracle vault ✓")
             left = dotenv_secrets(ROOT)
             if left:
-                warn.append(f"secrets still written in .env (remove them): {', '.join(left)}")
+                warn.append(f"Passwords are still written in the .env file (remove them; they are in the vault): "
+                            f"{', '.join(left)}")
     except Exception as e:                                    # noqa: BLE001
         warn.append(f"secrets check failed: {str(e)[:120]}")
 
@@ -214,27 +220,35 @@ def main(argv) -> int:
         from guardian.broker import IndStocksClient
         client = IndStocksClient.from_env("NSE", token_cache=ROOT / ".token_cache.json")
         p = client.profile()
-        ok.append(f"INDstocks token OK ({p.get('first_name', '')} {p.get('last_name', '')})".strip())
+        tech.append("broker login ✓")
         if p.get("is_ddpi_active") is False:
-            warn.append("DDPI is OFF: automatic sells of delivery holdings will be rejected - activate DDPI in INDmoney")
+            warn.append("DDPI is OFF. DDPI is the permission that lets the bot sell shares from your account; without "
+                        "it every automatic sale is refused. Turn it on in the INDmoney app.")
     except Exception as e:                                    # noqa: BLE001
         client = None
-        warn.append(f"INDstocks login FAILED: {str(e)[:200]}")
+        warn.append(f"Could not log in to INDstocks (your broker), so the bot cannot trade until this is fixed. "
+                    f"Details: {str(e)[:200]}")
 
     off = clock_offset()
     if off is None:
-        warn.append("clock sync unknown (chronyc not answering)")
+        warn.append("Could not check the server clock (the broker login needs the right time).")
     elif off > 1.0:
-        warn.append(f"clock is off by {off:.1f}s (TOTP may fail)")
+        warn.append(f"The server clock is {off:.1f} seconds off; the broker login code may fail.")
     else:
-        ok.append(f"clock in sync ({off * 1000:.0f} ms)")
+        tech.append(f"clock ✓ ({off * 1000:.0f} ms)")
 
     du = shutil.disk_usage("/")
     free_gb = du.free / 1e9
-    (ok if free_gb > 3 else warn).append(f"disk free {free_gb:.0f} GB")
+    if free_gb > 3:
+        tech.append(f"disk {free_gb:.0f} GB free")
+    else:
+        warn.append(f"The server disk is almost full ({free_gb:.0f} GB free).")
     m = mem_available_pct()
     if m is not None:
-        (ok if m > 10 else warn).append(f"memory free {m:.0f}%")
+        if m > 10:
+            tech.append(f"memory {m:.0f}% free")
+        else:
+            warn.append(f"The server is low on memory ({m:.0f}% free).")
 
     # configuration and kill switch
     try:
@@ -242,7 +256,12 @@ def main(argv) -> int:
         cfg = C.load(None)
         mode = cfg.get("mode", "paper")
         live = [n for n, s in (cfg.get("strategies") or {}).items() if (s or {}).get("live")]
-        ok.append(f"mode {mode.upper()}" + (f", live-enabled: {', '.join(live)}" if mode == "live" and live else ""))
+        from trader.plain import strategy as plain_strategy
+        if mode == "live" and live:
+            ok.append("💰 Real-money trading is ON for: " + ", ".join(plain_strategy(n) for n in live) + ".")
+        else:
+            ok.append("📄 Practice mode: no real money is used." if mode != "live" else
+                      "💰 Real-money mode, but no strategy is allowed to use real money.")
         if cfg.get("_autopilot"):
             from trader.autopilot import describe
             ok.append(describe(cfg, ROOT))
@@ -259,7 +278,7 @@ def main(argv) -> int:
         if holdings is not None:
             new_holdings_line(cfg, holdings, warn)
         if (ROOT / cfg["limits"].get("kill_switch_file", "STOP")).exists():
-            warn.append("STOP file present: no new orders will be placed")
+            warn.append("The STOP switch is on (a file named STOP on the server): the bot places no new orders.")
         try:
             from trader.universe_update import staleness
             stale = staleness(ROOT, cfg, datetime.now().date())
@@ -274,7 +293,8 @@ def main(argv) -> int:
                 warn.append(stale)
             bad = config_problems(cfg)
             if bad:
-                warn.append(f"trader.yaml holidays: not dates, ignored: {', '.join(bad[:5])} (use YYYY-MM-DD in a list)")
+                warn.append(f"Some market holidays in trader.yaml are not valid dates and were ignored: "
+                        f"{', '.join(bad[:5])} (write them as YYYY-MM-DD).")
         except Exception as e:                                # noqa: BLE001
             warn.append(f"holiday list check failed: {str(e)[:120]}")
     except Exception as e:                                    # noqa: BLE001
@@ -295,13 +315,15 @@ def main(argv) -> int:
                 j.close()
                 if mode_ == "lab":
                     if pos or orders:
-                        ok.append(f"lab (paper experiment): {len(pos)} positions, working orders {len(orders)}")
+                        tech.append(f"lab experiments: {len(pos)} positions")
                     continue
                 if pos or orders or mode_ == "paper":
-                    held = ", ".join(f"{p.symbol} {p.qty:g}" for p in pos[:8]) or "none"
-                    ok.append(f"{mode_}: positions {held}; working orders {len(orders)}")
+                    held = ", ".join(f"{p.symbol} {p.qty:g}" for p in pos[:8]) or "nothing yet"
+                    label = "Real-money holdings" if mode_ == "live" else "Practice (paper) holdings"
+                    ok.append(f"{label}: {held}" + (f"; orders waiting to be filled: {len(orders)}" if orders else "")
+                              + ".")
         except Exception as e:                                # noqa: BLE001
-            warn.append(f"journal unreadable: {e}")
+            warn.append(f"The bot's trade records could not be read ({e}).")
 
     # previous job runs
     runs = last_runs()
@@ -312,33 +334,40 @@ def main(argv) -> int:
                 when, rc = runs[job]
                 parts.append(f"{job} {'✓' if rc == 0 else '✗'} {when:%a %H:%M}")
                 if rc != 0:
-                    warn.append(f"last {job} run failed (rc {rc}, {when:%a %d %b %H:%M})")
-        ok.append("last runs: " + ", ".join(parts))
+                    warn.append(f"The '{job}' job failed when it last ran ({when:%a %d %b %H:%M}); see "
+                                f"logs/cron/{job}.log on the server.")
+        tech.append("jobs: " + ", ".join(parts))
     else:
-        ok.append("no scheduled runs yet")
+        tech.append("no scheduled jobs have run yet")
 
     backups = sorted((ROOT / "backups").glob("pg-*.tar.gz"))
     if backups:
         age_h = (time.time() - backups[-1].stat().st_mtime) / 3600
-        (ok if age_h < 80 else warn).append(f"last backup {age_h:.0f} h ago")
+        if age_h < 80:
+            tech.append(f"backup {age_h:.0f} h ago")
+        else:
+            warn.append(f"The last backup is {age_h:.0f} hours old.")
 
     ip = public_ip()
     ip_file = ROOT / "trader" / "state" / "public_ip.txt"
     if ip:
         old = ip_file.read_text().strip() if ip_file.exists() else None
         if old and old != ip:
-            warn.append(f"public IP CHANGED {old} -> {ip}: update the static IP on INDstocks before live orders")
+            warn.append(f"The server's internet address changed from {old} to {ip}. Update it in INDstocks' API "
+                        "settings, or real orders will be refused.")
         else:
-            ok.append(f"public IP {ip}")
+            tech.append(f"address {ip}")
         ip_file.parent.mkdir(parents=True, exist_ok=True)
         ip_file.write_text(ip + "\n")
 
-    head = "🔄 Server restarted" if reboot else ("⚠️ Server check: attention needed" if warn else "✅ Server OK")
+    head = ("🔄 The server restarted" if reboot else "⚠️ Your trading bot needs attention" if warn
+            else "✅ Your trading bot is healthy")
     from zoneinfo import ZoneInfo
     text = f"{head} — {datetime.now(ZoneInfo('Asia/Kolkata')):%a %d %b %H:%M} IST"
-    if warn:
-        text += "\n" + "\n".join(f"• {w}" for w in warn)
-    text += "\n" + "\n".join(f"· {o}" for o in ok)
+    text += ("\n" + "\n".join(f"⚠️ {w}" for w in warn)) if warn else "\nEverything needed for today's trading is working."
+    text += "\n\n" + "\n".join(f"• {o}" for o in ok)
+    if tech:
+        text += "\n\nTechnical checks: " + " · ".join(tech)
     from guardian.notifier import Notifier
     Notifier(dry_run=dry).send(text)
     return 0
