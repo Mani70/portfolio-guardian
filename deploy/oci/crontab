@@ -20,7 +20,11 @@ PG=__APP__/deploy/oci/job.sh
 15  20  *   *   1-5  $PG fo-paper      # F&O practice run on paper (Addenda 20/20a; never an order)
 45  22  *   *   1-5  $PG fo-paper      # again if NSE's F&O file was late (reports once a day)
 40  7   *   *   *    $PG reel          # daily education Reel -> Telegram for you to review and post on Instagram
-40  18  *   *   *    $PG reel-evening  # second Reel (news explained, or a market-history story) if reel.evening is on
+15  19  *   *   1-5  $PG reel-market   # daily market brief + MARKET AAJ Reel after the close (holidays skip)
+0   21  *   *   1-5  $PG reel-market   # again if NSE's closing data was late (sends once a day)
+30  21  *   *   *    $PG reel-evening  # NEWS SAMJHO on the day's top trusted news, else a market story, if reel.evening is on
+40  10  *   *   0    $PG reel-company  # Sunday: COMPANY KI KUNDLI case study (business only, never the share)
+*   *   *   *   *    $PG reel-breaking # every minute, 24h: official market-moving news -> Story card + BREAKING Reel (max 3 a day)
 15  17  *   *   1-5  $PG autodeploy    # GitHub main -> server, only if all tests pass (Telegram either way)
 5    6  *   1   6    $PG retest        # Saturdays in January: the autopilot's yearly re-test (runs once a year)
 # The 15:50 portfolio-rule check (guardian, config.yaml) is off since the holdings went to the bot; the

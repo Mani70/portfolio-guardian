@@ -592,13 +592,35 @@ def cmd_reel(cfg, args) -> int:
     from guardian.notifier import Notifier
     from .reel.job import run
     n = Notifier(dry_run=args.dry_run)
+    from .holidays import load as load_holidays
     rc = cfg.get("reel") or {}
+    if args.slot == "breaking":
+        bc = rc.get("breaking") or {}
+        if not bc.get("enabled", True):
+            print("reel (breaking): off (trader.yaml reel: {breaking: {enabled: false}})")
+            return 0
+        from datetime import date as _date
+        from .reel import breaking, job as reel_job
+        mk = lambda f: reel_job.make(_date.today(), handle=str(rc.get("handle", "")),   # noqa: E731
+                                     voice_model=bc.get("voice_model", rc.get("voice_model")),
+                                     voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman")),
+                                     facts_override=f)
+        print(breaking.run(n.send, n.send_video, mk, feeds=bc.get("feeds"), send_photo=n.send_photo,
+                           max_per_day=int(bc.get("max_per_day", 2)), max_age_min=int(bc.get("max_age_min", 120)),
+                           sweep_hours=int(bc.get("sweep_hours", 2))))
+        return 0
+    if args.slot == "company" and not rc.get("company", True):
+        print("reel (company): off (trader.yaml reel: {company: false})")
+        return 0
+    if args.slot == "market" and not rc.get("market", True):
+        print("reel (market): off (trader.yaml reel: {market: false})")
+        return 0
     if args.slot == "evening" and not rc.get("evening") and not args.topic:
         print("reel (evening): off (trader.yaml reel: {evening: true} turns on the second daily Reel)")
         return 0
     print(run(n.send, n.send_video, handle=str(rc.get("handle", "")), voice_model=rc.get("voice_model"),
               voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman")), force=args.force, slot=args.slot,
-              topic=args.topic))
+              topic=args.topic, holidays=load_holidays(ROOT, cfg), send_photo=n.send_photo, send_album=n.send_album))
     return 0
 
 
@@ -878,8 +900,9 @@ def main(argv=None) -> int:
     ap.add_argument("--no-update", action="store_true", help="retest: use the data already downloaded")
     ap.add_argument("--forget", action="store_true",
                     help="cancel: mark earlier-day orders INDstocks no longer knows as cancelled (check the app first)")
-    ap.add_argument("--topic", default="", help="reel: myth:N or story:N (numbers in trader/reel/content.py)")
-    ap.add_argument("--slot", default="morning", choices=["morning", "evening"], help="reel: which daily Reel")
+    ap.add_argument("--topic", default="", help="reel: myth:N, story:N (trader/reel/content.py) or company:SYMBOL")
+    ap.add_argument("--slot", default="morning", choices=["morning", "market", "evening", "company", "breaking"],
+                    help="reel: which Reel (company = the weekly COMPANY KI KUNDLI case study)")
     ap.add_argument("--voice", default="", help="voices: compare models and spellings for this voice ID")
     ap.add_argument("--model", default="", help="voices: ElevenLabs model for the first test")
     ap.add_argument("--stock", default="", help="split / keep: the stock")

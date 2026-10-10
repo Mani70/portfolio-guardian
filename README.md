@@ -420,9 +420,37 @@ first comment; you watch it and post it yourself. Each Reel is ONE topic, in one
 
 | Series | When | What |
 |---|---|---|
-| MYTH vs SACH | every morning | a popular market belief, checked against this project's own tests, and the concept behind it |
+| PAISA KI PATHSHALA | Tue, Thu, Sat, Sun mornings | a numbered 40-day course from zero to confident investor ("Din 1: Share kya hota hai" ... "Din 40: Scam kaise pehchaane"), taken in order |
+| MYTH vs SACH | Mon, Wed, Fri mornings | a popular market belief, checked against this project's own tests, and the concept behind it |
 | NEWS SAMJHO | evening, when there is notable news | one official NSE announcement from a heavily traded company, explained, with how shares reacted to that TYPE of news in the past (Addendum 22) - never a call on the share; routine ESOP allotments are skipped |
 | MARKET KI KAHANI | evening, otherwise | a settled episode of market history (Harshad Mehta, Satyam, 2008, Karvy, IL&FS...) told as a story, with its lesson |
+| MARKET AAJ | weekdays 19:15 (again 21:00 if NSE is late; holidays skip) | the day's market wrap: Nifty, Bank, Midcap, Smallcap, sectors, breadth, India VIX, FII/DII flows, the day's trusted news explained, what history says after such days (Addendum 23), and what is due on the next session. With it comes a **daily market brief** on Telegram with every news source link |
+| COMPANY KI KUNDLI | Sundays 10:40 | one well-known company (26 in rotation, `--topic company:SYMBOL` for a chosen one): what it does, how it earns, its size, turning points and the risks it reports - every fact from a trusted page the search retrieved; never its share price, market value, valuation, a target or a buy/sell view (`trader/reel/company.py`) |
+| BREAKING SAMJHO | NSE every minute, 24 hours; official feeds every 5 minutes | official, market-moving news within minutes: NSE announcements of well-known companies (results, orders, deals, rating changes, exits, defaults, buybacks, splits; their statements and clarifications after a quick Claude check) and RBI / SEBI / PIB / US Federal Reserve press releases with market words. Claude reads the official document itself (web fetch) and writes only what it says. Max 3 a day, 30 minutes apart; the rest come as one-line alerts (`trader/reel/breaking.py`) |
+
+Trusted news (Addendum 23, enforced in `trader/reel/market.py`): an official NSE announcement, or an item found by a
+web search limited to official sites (RBI, SEBI, PIB, exchanges, US government) and established business outlets,
+kept only with one official source or two different outlets among the pages actually retrieved. Index and sector
+moves are reported as market commentary; a company is named only with its news, never with a price or move of the
+last 30 days (SEBI's price-data rule for education). "What next" is only history from Addenda 22-23, as an average,
+or "no reliable pattern". The 21:30 evening Reel (NEWS SAMJHO) explains the day's top trusted news when there is one.
+
+MARKET AAJ also carries **chart reading at index level** (Nifty 50 and Nifty Bank against their 20/50/200-day
+averages, the 52-week range, 14-day RSI, up/down streaks - SEBI's research rules exclude technical analysis of an index
+or sector), **index options sentiment** from NSE's F&O file (put-call ratio of open interest, the strikes with the most
+open contracts), always with the honest line that our tests found no short-term edge in such signals, and a **viewers'
+poll** ("Kal Nifty upar ya neeche? Comment mein UP ya DOWN") revealed the next session with a running tally - viewers
+guess, the bot never does.
+
+**Quarterly results**: the brief lists results due on the next session (NSE's board-meeting calendar, companies trading
+at least ₹50 crore a day) and, on the day, RESULTS TODAY - revenue, profit, their change from a year earlier, the
+reasons the company gave and any dividend, each point from a trusted page the search retrieved (a result needs the
+company's filing or two outlets). On a big results day the 21:30 Reel explains the largest one (RESULTS SAMJHO).
+Business numbers may be said with the company's name; its share price or share move never (`script.share_talk`).
+The same daily Claude call also collects **why the market and its sectors moved, as reported** by those outlets,
+and **global cues** (US indices' last close, Asian markets, Brent crude, the rupee); each needs a trusted page the
+search retrieved, and every sentence passes a SEBI check in code (no forecast, instruction or promise; no company
+with a % or a price). It costs about $0.15-0.40 a day of Anthropic credit (up to 10 searches + reading).
 
 Built for watch time (research notes: `trader/reel/RESEARCH.md`): a hook in the first beat, 8-12 beats with a new
 picture every beat, word-by-word captions with the current word highlighted, a progress bar, big numbers, trimmed
@@ -444,7 +472,8 @@ reel:
   voice_id: <ID>                       # optional: overrides ELEVENLABS_VOICE_ID from the vault
   voice_model: eleven_multilingual_v2  # default eleven_flash_v2_5; eleven_v3 is the most expressive
   speak: devanagari                    # the voice reads Hindi words in Devanagari (captions stay Roman); default roman
-  evening: true                        # the second daily Reel (news explained, or a market-history story)
+  evening: true                        # the 21:30 Reel (the day's top news explained, or a market-history story)
+  market: true                         # the weekday MARKET AAJ wrap + daily brief (default on)
 ```
 **Choosing the voice:** `trader.run voices` sends Telegram clips of the same Hinglish lines read by your own voices and
 the most used Hindi voices of the Voice Library (about 3k credits); `trader.run voices --voice <ID>` reads them 4 ways
@@ -452,6 +481,36 @@ for one voice - eleven_multilingual_v2 / eleven_v3, Hindi in Roman letters / in 
 trader.yaml lines (about 1.1k credits). In `speak: devanagari` Claude writes each scene twice: the Roman narration that
 is checked and shown, and the same words with Hindi in Devanagari for the voice; a voice line that adds a call, a
 prediction or a promise, or has different numbers, is dropped and that scene is voiced from the Roman narration.
+
+Breaking speed: an "ABHI ABHI" Instagram Story card goes to Telegram the moment a results / deal / rating / exit
+filing is picked (post it as a Story at once), a "KYA HUA" card with the key facts once Claude has read the filing,
+then the Reel; Claude runs in fast mode for breaking news (falls back to standard), all beats are voiced in parallel
+and the video uses a faster encoder. News older than 2 hours gets no Reel (`max_age_min`); overnight news (23:00-07:00)
+counts as fresh until 09:30.
+
+Quality first: breaking Reels are full length (45-60 s) in the main voice; Claude reads the official document and
+adds a little sourced background (up to 3 searches of the trusted list) before writing. **Catch-up search**: every 2
+hours, 08:00-22:00, Claude searches the trusted list for important news of the last 3 hours that the watch has not
+covered (it is told what was covered); a "major" find becomes a ZAROORI KHABAR Reel at once, the rest are logged.
+**RAAT KI REPORT** (21:30): the day's results, every breaking and catch-up story, trusted news of the 19:15
+compilation and up to 2 filings that were only alerted (read now from the document), the market close and the next
+session - one 90-120 s Reel with more clarity; one story -> its explainer; none -> a MARKET KI KAHANI story.
+```yaml
+reel:
+  breaking: {enabled: true, max_per_day: 2, max_age_min: 120, sweep_hours: 2}   # voice_model: defaults to reel's
+                                                                                 # feeds: {name: rss url}
+```
+**Engagement extras** (`trader/reel/engage.py`): every Reel comes with a branded **cover** for the profile grid and a
+**posting checklist** (cover, the music to search for its series, the comment to pin); captions open with a hook and end
+with the comment question, a share line and "Save karo". With MARKET AAJ come an **"Aaj ka market" carousel**
+(4:5 slides: scoreboard, sectors, money flows, news, results, chart, next session) and a **Story poll card**
+("Kal Nifty: UP ya DOWN?" - add Instagram's poll sticker). Feed discipline: the 3 daily Reels plus at most 2 breaking
+Reels, and only for news Claude rates *major*; notable news goes to Story cards and RAAT KI REPORT.
+
+Claude cost at full volume: roughly $1.5-2.5 a day (catch-up searches ~$1, breaking reads, the night report).
+**Credits at full volume** (07:40 + 19:15 + 21:30 daily, Sundays, ~2 breaking a day) come to roughly 180-200k
+ElevenLabs credits a month with eleven_multilingual_v2 - more than a 100k-credit plan; check the plan's monthly
+credits on elevenlabs.io and either move up a plan or set `voice_model: eleven_flash_v2_5` (about half).
 
 Voice credits: the default model (eleven_flash_v2_5) uses about 20-22k ElevenLabs credits a month for a daily Reel
 (Starter plan: 30k); eleven_multilingual_v2 sounds better and needs about 40-44k (Creator plan); check eleven_v3's

@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-JOBS = ["intraday", "watch", "swing-check", "swing-plan", "backup", "universe", "holidays", "autodeploy", "insights", "fo-paper", "reel", "reel-evening"]
+JOBS = ["intraday", "watch", "swing-check", "swing-plan", "backup", "universe", "holidays", "autodeploy", "insights", "fo-paper", "reel", "reel-market", "reel-evening", "reel-company", "reel-breaking"]
 END = re.compile(r"^===== (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) end (\S+) rc=(\d+)")
 
 

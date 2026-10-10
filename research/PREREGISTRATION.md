@@ -816,3 +816,33 @@ Reported per type: number of events, average and median move, share of events th
 (events grouped by date). A type is described as having a "consistent pattern" only if its 5-session average has
 the same sign in 2012-2018 and 2019-2026 and |t| >= 3 over the whole period (11+ types are tested). Otherwise the
 video says "no reliable pattern". No trading rule follows from this study: it is for explaining news.
+
+## Addendum 23 (10 Oct 2026, before any of these numbers is computed): "after a day like today" and trusted news
+
+Purpose: the owner's weekday market-wrap Reel ("MARKET AAJ") reports what the market and its sectors did today and
+explains the day's trusted news. It may say what happened in the past after days like today - never what will
+happen. This study supplies those facts, so the Reel can say "history shows a pattern" only where one survives.
+
+Data (research/market23.py): daily closes of 12 NSE indices from research/history20.load_index - Nifty 50, Nifty
+Bank, Nifty IT, Nifty Pharma, Nifty Auto, Nifty FMCG, Nifty Metal, Nifty Realty, Nifty PSU Bank, Nifty Energy,
+Nifty Midcap 150 (Midcap 100 before it exists) and Nifty Smallcap 250 (Smallcap 100 before it exists); 1 Jan 2012 -
+30 Sep 2026, wherever an index has data.
+
+A "day like today" is the index's close-to-close move, in one of 7 fixed buckets: <= -3%, -3% to -1.5%, -1.5% to
+-0.5%, -0.5% to +0.5%, +0.5% to +1.5%, +1.5% to +3%, >= +3%.
+
+Measure: the index's move over the next 1 and 5 sessions (close to close), minus that index's average 1- and 5-
+session move over all days of the period (so a bucket is compared with an ordinary day). Reported per index, bucket
+and horizon: days, average excess move, share of days the index rose, Newey-West t-statistic (4 lags).
+
+A cell is described as a "consistent pattern" only if its average excess move has the same sign in 2012-2018 and
+2019-2026, each half has at least 20 days, and |t| >= 3.5 over the whole period (168 cells are tested; the same bar
+as Addendum 21). Otherwise the Reel says history shows no reliable pattern after such days. No trading rule follows.
+
+Trusted news rule (fixed now, enforced in code, trader/reel/market.py): a news item is used only if it is (a) an
+official NSE company announcement of an Addendum 22 type, or (b) found by a web search limited to a fixed list of
+official sites (Indian and US government, RBI, SEBI, exchanges) and established business news outlets, AND it has
+either one official source or two different outlets among the pages actually retrieved. Each item carries its
+source links into the owner's Telegram brief. Company names may appear with their news, never with a price or move
+of the last 30 days (SEBI price-data rule for education, 30-day lag from 1 Jul 2026); index and sector moves are
+reported as market commentary.

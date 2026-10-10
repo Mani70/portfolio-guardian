@@ -43,6 +43,47 @@ class Notifier:
         except requests.RequestException as e:
             log.error("Telegram send failed: %s", e)
 
+    def send_photo(self, path, caption: str = "") -> bool:
+        """An image (e.g. a breaking-news Story card) to the Telegram chat. True if Telegram accepted it."""
+        print(f"[photo] {path}\n{caption}")
+        if self.dry_run or not (self.tg_token and self.tg_chat):
+            return False
+        try:
+            with open(path, "rb") as fh:
+                r = requests.post(f"https://api.telegram.org/bot{self.tg_token}/sendPhoto",
+                                  data={"chat_id": self.tg_chat, "caption": caption[:1000]}, files={"photo": fh},
+                                  timeout=60)
+            if r.status_code != 200:
+                log.error("Telegram photo failed: HTTP %s %s", r.status_code, r.text[:200])
+            return r.status_code == 200
+        except (OSError, requests.RequestException) as e:
+            log.error("Telegram photo failed: %s", e)
+            return False
+
+    def send_album(self, paths, caption: str = "") -> bool:
+        """Up to 10 images as one Telegram album (e.g. a carousel to post on Instagram). True if accepted."""
+        paths = list(paths)[:10]
+        print(f"[album] {len(paths)} images\n{caption}")
+        if self.dry_run or not (self.tg_token and self.tg_chat) or not paths:
+            return False
+        import json as _json
+        media = [{"type": "photo", "media": f"attach://p{i}", **({"caption": caption[:1000]} if i == 0 else {})}
+                 for i in range(len(paths))]
+        try:
+            files = {f"p{i}": open(p, "rb") for i, p in enumerate(paths)}
+            try:
+                r = requests.post(f"https://api.telegram.org/bot{self.tg_token}/sendMediaGroup",
+                                  data={"chat_id": self.tg_chat, "media": _json.dumps(media)}, files=files, timeout=120)
+            finally:
+                for fh in files.values():
+                    fh.close()
+            if r.status_code != 200:
+                log.error("Telegram album failed: HTTP %s %s", r.status_code, r.text[:200])
+            return r.status_code == 200
+        except (OSError, requests.RequestException) as e:
+            log.error("Telegram album failed: %s", e)
+            return False
+
     def send_audio(self, path, caption: str = "", title: str = "") -> bool:
         """An audio clip to the Telegram chat: a local file, or an https URL Telegram fetches itself."""
         print(f"[audio] {path}\n{caption}")
