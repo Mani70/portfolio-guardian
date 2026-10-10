@@ -30,7 +30,7 @@ FACTS = company.CompanyFacts(
 
 
 def test_research_keeps_only_sourced_facts_and_never_the_share():
-    got, note = company.research("ASIANPAINT", "Asian Paints", FakeClient(FACTS))
+    got, note = company.research("ASIANPAINT", "Asian Paints", FakeClient(FACTS), feed_items=[])
     texts = [f["text"] for k in ("how_it_earns", "numbers", "history", "risks") for f in got[k]]
     assert "Founded in 1942 in Mumbai" in texts and not any("Share price" in t or "9,000" in t for t in texts)
     assert note == "5 of 7 facts passed the source and SEBI checks"

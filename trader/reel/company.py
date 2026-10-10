@@ -62,7 +62,8 @@ def pick(episodes: int) -> tuple:
     return COMPANIES[episodes % len(COMPANIES)]
 
 
-def research(symbol: str, name: str, client=None, max_searches: int = 8) -> tuple[Optional[dict], str]:
+def research(symbol: str, name: str, client=None, max_searches: int = 8,
+             feed_items: Optional[List[dict]] = None) -> tuple[Optional[dict], str]:
     """(sourced facts, note). Each fact needs a trusted page the search retrieved and must pass the ban list."""
     import anthropic
     if client is None and not os.getenv("ANTHROPIC_API_KEY"):
@@ -70,13 +71,15 @@ def research(symbol: str, name: str, client=None, max_searches: int = 8) -> tupl
     client = client or anthropic.Anthropic()
     tool = {"type": "web_search_20260209", "name": "web_search", "max_uses": max_searches,
             "allowed_domains": market.OFFICIAL + market.OUTLETS}
-    messages = [{"role": "user", "content": PROMPT.format(name=name, symbol=symbol)}]
-    retrieved, notes = set(), []
+    from datetime import datetime
+    items = market.outlet_items(datetime.now(), hours=24 * 60, query=f'"{name}"') if feed_items is None else feed_items
+    messages = [{"role": "user", "content": market.with_feeds(PROMPT.format(name=name, symbol=symbol), items)}]
+    retrieved, notes = {it["link"] for it in items}, []
     try:
         for _ in range(4):
-            resp = client.beta.messages.create(
-                model=market.MODEL, max_tokens=16000, messages=messages, tools=[tool],
-                output_config={"effort": "medium"}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+            resp = market.create(client, False, model=market.MODEL, max_tokens=16000, messages=messages,
+                                 tools=[tool], output_config={"effort": "medium"},
+                                 betas=["server-side-fallback-2026-07-01"], fallbacks="default")
             for b in resp.content:
                 if b.type == "web_search_tool_result" and isinstance(b.content, list):
                     retrieved |= {r.url for r in b.content if getattr(r, "url", None)}
@@ -87,9 +90,11 @@ def research(symbol: str, name: str, client=None, max_searches: int = 8) -> tupl
             messages = messages[:1] + [{"role": "assistant", "content": resp.content}]
         if not notes or not retrieved:
             return None, "nothing found"
+        from .feeds import material
         parsed = client.beta.messages.parse(
             model=market.MODEL, max_tokens=16000, output_format=CompanyFacts, output_config={"effort": "low"},
-            messages=[{"role": "user", "content": STRUCTURE.format(notes="\n".join(notes)[:60000])}],
+            messages=[{"role": "user", "content": STRUCTURE.format(
+                notes="\n".join(notes)[:60000] + ("\n\nOUTLET FEED ITEMS:\n" + material(items, 60) if items else ""))}],
             betas=["server-side-fallback-2026-07-01"], fallbacks="default")
         cf = parsed.parsed_output
     except anthropic.APIError as e:

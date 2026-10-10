@@ -594,6 +594,14 @@ def cmd_reel(cfg, args) -> int:
     n = Notifier(dry_run=args.dry_run)
     from .holidays import load as load_holidays
     rc = cfg.get("reel") or {}
+    if args.slot == "feeds":                                              # which outlet feeds answer right now
+        from datetime import datetime as _dt
+        from .reel import feeds
+        items, status = feeds.collect(_dt.now(), 24, rc.get("news_feeds") or None)
+        for name, ok in status.items():
+            print(f"{'OK ' if ok else 'NO '} {name}")
+        print(f"{sum(status.values())} of {len(status)} feeds answer; {len(items)} items in the last 24 hours")
+        return 0
     if args.slot == "breaking":
         bc = rc.get("breaking") or {}
         if not bc.get("enabled", True):
@@ -901,7 +909,7 @@ def main(argv=None) -> int:
     ap.add_argument("--forget", action="store_true",
                     help="cancel: mark earlier-day orders INDstocks no longer knows as cancelled (check the app first)")
     ap.add_argument("--topic", default="", help="reel: myth:N, story:N (trader/reel/content.py) or company:SYMBOL")
-    ap.add_argument("--slot", default="morning", choices=["morning", "market", "evening", "company", "breaking"],
+    ap.add_argument("--slot", default="morning", choices=["morning", "market", "evening", "company", "breaking", "feeds"],
                     help="reel: which Reel (company = the weekly COMPANY KI KUNDLI case study)")
     ap.add_argument("--voice", default="", help="voices: compare models and spellings for this voice ID")
     ap.add_argument("--model", default="", help="voices: ElevenLabs model for the first test")

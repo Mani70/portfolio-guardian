@@ -71,11 +71,11 @@ class Breaking(BaseModel):
     context: List[Context] = Field(default_factory=list)
 
 
-READ = """Read this official document and report what it says, for Indian retail investors: {url}
+READ = """The official document attached is from {url}
 
 It is: {what}
 
-1. Use the web_fetch tool on that exact URL. Report the facts stated in the document, with their numbers and dates.
+1. Read the attached document. Report the facts it states, with their numbers and dates, for Indian retail investors.
 2. Then, if it helps a beginner understand it, use web_search (up to 3 searches) for short background from established outlets or official sites - e.g. the same quarter last year, or what the policy changes - with the URLs.
 3. Say plainly whether it is material for many investors (a big number, a policy change, a leadership exit, a default, a large deal) or routine.
 No forecasts, no share prices or share moves, no stock views."""
@@ -171,28 +171,51 @@ def priority(c: dict) -> tuple:
 
 
 # ---------------------------------------------------------------- reading the document
-def read(c: dict, client=None, fast: bool = True) -> Optional[dict]:
-    """Claude reads the official document (web fetch) and returns the facts, or None if it could not."""
+def document(url: str, get=None) -> Optional[dict]:
+    """The official document as a content block for Claude, downloaded by the server itself (exchange and regulator
+    sites often refuse crawlers): a PDF as a base64 document, a web page as plain text. None if it cannot be had."""
+    import base64
+    get = get or (lambda u: requests.get(u, headers=market.HEAD, timeout=40))
+    try:
+        r = get(url)
+    except requests.RequestException as e:
+        log.warning("document %s: %s", url, e)
+        return None
+    if r.status_code != 200 or not r.content:
+        return None
+    if r.content[:4] == b"%PDF" or url.lower().endswith(".pdf"):
+        if len(r.content) > 30_000_000:
+            return None
+        return {"type": "document", "source": {"type": "base64", "media_type": "application/pdf",
+                                               "data": base64.standard_b64encode(r.content).decode()}}
+    text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", r.text, flags=re.S | re.I)
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text)).strip()
+    if len(text) < 200:
+        return None
+    return {"type": "document", "source": {"type": "text", "media_type": "text/plain", "data": text[:60000]}}
+
+
+def read(c: dict, client=None, fast: bool = True, get=None) -> Optional[dict]:
+    """Claude reads the official document (downloaded by the server) and returns the facts, or None."""
     import anthropic
     if client is None and not os.getenv("ANTHROPIC_API_KEY"):
         return None
+    doc = document(c["url"], get)
+    if doc is None:
+        return None
     client = client or anthropic.Anthropic()
-    tools = [{"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 2,
-              "allowed_domains": market.OFFICIAL + ["nseindia.com"]},
-             {"type": "web_search_20260209", "name": "web_search", "max_uses": 3,
+    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 3,
               "allowed_domains": market.OFFICIAL + market.OUTLETS}]
     what = f"{c['source']} - {c['company']}: {c['title']}"
-    messages = [{"role": "user", "content": READ.format(url=c["url"], what=what)}]
-    notes, fetched, retrieved = [], False, set()
+    messages = [{"role": "user", "content": [doc, {"type": "text", "text": READ.format(url=c["url"], what=what)}]}]
+    notes, fetched, retrieved = [], True, set()
     try:
         for _ in range(3):
             resp = market.create(client, fast, model=market.MODEL, max_tokens=16000, messages=messages, tools=tools,
                                  output_config={"effort": "medium"}, betas=["server-side-fallback-2026-07-01"],
                                  fallbacks="default")
             for b in resp.content:
-                if b.type == "web_fetch_tool_result" and getattr(b.content, "type", "") == "web_fetch_result":
-                    fetched = True
-                elif b.type == "web_search_tool_result" and isinstance(b.content, list):
+                if b.type == "web_search_tool_result" and isinstance(b.content, list):
                     retrieved |= {r.url for r in b.content if getattr(r, "url", None)}
                 elif b.type == "text":
                     notes.append(b.text)
@@ -264,7 +287,7 @@ NOTES:
 {notes}"""
 
 
-def sweep(now: datetime, covered: List[str], client=None) -> List[dict]:
+def sweep(now: datetime, covered: List[str], client=None, feed_items: Optional[List[dict]] = None) -> List[dict]:
     """Trusted, important news of the last 3 hours that the watch has not covered (rule of Addendum 23 in code)."""
     import anthropic
     if client is None and not os.getenv("ANTHROPIC_API_KEY"):
@@ -273,8 +296,10 @@ def sweep(now: datetime, covered: List[str], client=None) -> List[dict]:
     listed = "; ".join(covered[-30:]) or "(nothing yet)"
     tool = {"type": "web_search_20260209", "name": "web_search", "max_uses": 6,
             "allowed_domains": market.OFFICIAL + market.OUTLETS, "user_location": {"type": "approximate", "country": "IN"}}
-    messages = [{"role": "user", "content": SWEEP.format(now=f"{now:%A %d %B %Y, %H:%M}", covered=listed)}]
-    retrieved, notes = set(), []
+    items = market.outlet_items(now, hours=4) if feed_items is None else feed_items
+    messages = [{"role": "user", "content": market.with_feeds(SWEEP.format(now=f"{now:%A %d %B %Y, %H:%M}",
+                                                                           covered=listed), items)}]
+    retrieved, notes = {it["link"] for it in items}, []
     try:
         for _ in range(3):
             resp = market.create(client, False, model=market.MODEL, max_tokens=16000, messages=messages, tools=[tool],
@@ -290,10 +315,12 @@ def sweep(now: datetime, covered: List[str], client=None) -> List[dict]:
             messages = messages[:1] + [{"role": "assistant", "content": resp.content}]
         if not notes or not retrieved:
             return []
+        from .feeds import material
         parsed = client.beta.messages.parse(
             model=market.MODEL, max_tokens=16000, output_format=SweepList, output_config={"effort": "medium"},
-            messages=[{"role": "user", "content": SWEEP_STRUCTURE.format(now=f"{now:%d %b %Y %H:%M}", covered=listed,
-                                                                         notes="\n".join(notes)[:60000])}],
+            messages=[{"role": "user", "content": SWEEP_STRUCTURE.format(
+                now=f"{now:%d %b %Y %H:%M}", covered=listed,
+                notes="\n".join(notes)[:60000] + ("\n\nOUTLET FEED ITEMS:\n" + material(items, 80) if items else ""))}],
             betas=["server-side-fallback-2026-07-01"], fallbacks="default")
         items = parsed.parsed_output.items if parsed.parsed_output else []
     except anthropic.APIError as e:
@@ -401,8 +428,18 @@ def run(notify, send_video, make, now: Optional[datetime] = None, out_dir: Optio
     chosen, alerts, state = watch(state, now, get, size, feeds, max_per_day, gap_min, client=client, fetch=fetch,
                                   learn_only=first_run, on_pick=on_pick, on_read=on_read, max_age_min=max_age_min)
     last = datetime.fromisoformat(state["swept"]) if state.get("swept") else None
-    if (chosen is None and not first_run and sweep_hours and 8 <= now.hour < 22
-            and (last is None or now - last >= timedelta(hours=sweep_hours))):
+    early = False
+    if chosen is None and not first_run and sweep_hours and now.minute % 10 == 0 and (
+            last is None or now - last >= timedelta(minutes=30)):              # outlets' feeds: free, every 10 minutes
+        from .feeds import corroborated
+        recent = market.outlet_items(now, hours=1)
+        early = corroborated(recent, now - timedelta(minutes=30), MACRO) >= 3  # a big story on 3+ outlets
+        sweeps_today = [t for t in state.get("sweeps", []) if t.startswith(now.date().isoformat())]
+        early = early and len(sweeps_today) < 12
+    if (chosen is None and not first_run and sweep_hours and (8 <= now.hour < 22 or early)
+            and (early or last is None or now - last >= timedelta(hours=sweep_hours))):
+        state["sweeps"] = [t for t in state.get("sweeps", []) if t.startswith(now.date().isoformat())] + [
+            now.isoformat(timespec="minutes")]
         state["swept"] = now.isoformat(timespec="minutes")
         today = now.date().isoformat()
         done = [x["headline"] for x in state.get("covered", []) if x["date"] == today]

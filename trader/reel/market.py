@@ -48,7 +48,42 @@ OFFICIAL = ["rbi.org.in", "sebi.gov.in", "pib.gov.in", "nseindia.com", "bseindia
             "treasury.gov", "ustr.gov", "commerce.gov", "bls.gov"]
 OUTLETS = ["reuters.com", "business-standard.com", "livemint.com", "economictimes.indiatimes.com",
            "thehindubusinessline.com", "financialexpress.com", "moneycontrol.com", "cnbctv18.com", "ndtvprofit.com",
-           "bloomberg.com", "apnews.com", "thehindu.com", "indianexpress.com", "timesofindia.indiatimes.com"]
+           "bloomberg.com", "apnews.com", "thehindu.com", "indianexpress.com", "timesofindia.indiatimes.com",
+           "businesstoday.in", "indiatoday.in", "hindustantimes.com", "news18.com", "zeebiz.com", "cnbc.com", "bbc.com",
+           "deccanherald.com", "fortuneindia.com", "outlookbusiness.com", "theprint.in", "wsj.com", "ft.com",
+           "marketwatch.com", "aljazeera.com"]
+# sites that block the web search's crawler: the API refuses any request listing them. Learned from its errors
+# (blocked_domains.json in cache/reel) and dropped from every list; the first 12 came from the first live run.
+BLOCKED_SEED = ["apnews.com", "cnbctv18.com", "economictimes.indiatimes.com", "financialexpress.com",
+                "indianexpress.com", "livemint.com", "moneycontrol.com", "ndtvprofit.com", "reuters.com", "thehindu.com",
+                "thehindubusinessline.com", "timesofindia.indiatimes.com"]
+BLOCKED_FILE = ROOT / "cache" / "reel" / "blocked_domains.json"
+
+
+def blocked() -> set:
+    try:
+        return set(BLOCKED_SEED) | set(json.loads(BLOCKED_FILE.read_text()))
+    except (OSError, ValueError):
+        return set(BLOCKED_SEED)
+
+
+def searchable(domains: List[str]) -> List[str]:
+    """The domains the web tools may be given (blocked ones removed)."""
+    b = blocked()
+    return [d for d in domains if d not in b]
+
+
+def _learn_blocked(message: str) -> List[str]:
+    if "not accessible to our user agent" not in message:
+        return []
+    found = re.findall(r"'([a-z0-9.-]+\.[a-z]{2,})'", message.split("user agent", 1)[1])
+    if found:
+        try:
+            BLOCKED_FILE.parent.mkdir(parents=True, exist_ok=True)
+            BLOCKED_FILE.write_text(json.dumps(sorted(blocked() | set(found))))
+        except OSError:
+            pass
+    return found
 MODEL = "claude-opus-5-5"
 
 
@@ -229,9 +264,41 @@ NOTES:
 {notes}"""
 
 
+FEED_ALIAS: Dict[str, str] = {}                                          # Google News link -> the outlet's site
+
+
 def _domain(url: str) -> str:
+    if url in FEED_ALIAS:
+        return FEED_ALIAS[url]
     h = urlparse(url).netloc.lower()
     return h[4:] if h.startswith("www.") else h
+
+
+def outlet_items(now: datetime, hours: int = 24, query: str = "") -> List[dict]:
+    """Recent items of the outlets' own RSS feeds (read by our server; see feeds.py), or a Google News search."""
+    from . import feeds as F
+    fs = {"Google News": F.GNEWS.format(q=__import__("urllib.parse").parse.quote_plus(query))} if query else None
+    try:
+        items, _ = F.collect(now, hours, fs)
+    except Exception as e:                                                 # noqa: BLE001 - feeds are an extra
+        log.warning("outlet feeds: %s", e)
+        return []
+    for it in items:
+        if "news.google." in it["link"] and it["site"]:
+            FEED_ALIAS[it["link"]] = it["site"]
+    return items
+
+
+def with_feeds(prompt: str, items: List[dict]) -> list:
+    """The user turn: the outlet-feed items as an attached document (when there are any), then the prompt."""
+    if not items:
+        return [{"type": "text", "text": prompt}]
+    from .feeds import material
+    return [{"type": "document", "title": "Headlines from outlets' own feeds (fetched by our server)",
+             "source": {"type": "text", "media_type": "text/plain", "data": material(items)}},
+            {"type": "text", "text": prompt + "\n\nThe attached document lists recent headlines from the outlets' own "
+                                              "feeds (Reuters, ET, Mint, Moneycontrol and others) with their links: "
+                                              "use them as sources too, citing their links."}]
 
 
 def _matches(host: str, domains: List[str]) -> bool:
@@ -292,18 +359,37 @@ def trusted_results(results: List[ResultItem], retrieved: set) -> List[dict]:
 
 def create(client, fast: bool = False, **kw):
     """client.beta.messages.create, in fast mode when asked (breaking news; up to ~2.5x faster output), falling back
-    to the standard speed if fast mode is busy or unavailable."""
+    to the standard speed if fast mode is busy or unavailable. Web tools only get searchable domains; if the API
+    names a blocked one, it is remembered, dropped and the request retried."""
     import anthropic
     betas = list(kw.pop("betas", []))
-    if fast:
+    for t in kw.get("tools", []):
+        if "allowed_domains" in t:
+            t["allowed_domains"] = searchable(t["allowed_domains"])
+    for attempt in range(3):
         try:
-            return client.beta.messages.create(speed="fast", betas=betas + ["fast-mode-2026-02-01"], **kw)
-        except (anthropic.RateLimitError, anthropic.BadRequestError) as e:
-            log.warning("fast mode unavailable (%s); standard speed", type(e).__name__)
-    return client.beta.messages.create(betas=betas, **kw)
+            if fast:
+                try:
+                    return client.beta.messages.create(speed="fast", betas=betas + ["fast-mode-2026-02-01"], **kw)
+                except anthropic.RateLimitError:
+                    log.warning("fast mode busy; standard speed")
+                except anthropic.BadRequestError as e:
+                    if "not accessible to our user agent" in str(e):
+                        raise
+                    log.warning("fast mode unavailable; standard speed")
+            return client.beta.messages.create(betas=betas, **kw)
+        except anthropic.BadRequestError as e:
+            gone = _learn_blocked(str(e))
+            if not gone or attempt == 2:
+                raise
+            log.warning("web search: dropped %d sites that block it: %s", len(gone), ", ".join(gone))
+            for t in kw.get("tools", []):
+                if "allowed_domains" in t:
+                    t["allowed_domains"] = [d for d in t["allowed_domains"] if d not in gone]
 
 
-def web_news(day: date, client=None, max_searches: int = 10, context: str = "", results_for: List[str] = ()) -> dict:
+def web_news(day: date, client=None, max_searches: int = 10, context: str = "", results_for: List[str] = (),
+             feed_items: Optional[List[dict]] = None) -> dict:
     """{items, drivers, cues, note}. Claude searches only the trusted sites; the trust rule (items: one official
     source or two outlets; drivers and cues: one trusted page) and the SEBI sentence check are applied in code."""
     import os
@@ -316,14 +402,15 @@ def web_news(day: date, client=None, max_searches: int = 10, context: str = "", 
     tool = {"type": "web_search_20260209", "name": "web_search", "max_uses": max_searches,
             "allowed_domains": OFFICIAL + OUTLETS, "user_location": {"type": "approximate", "country": "IN"}}
     ask = RESULTS_ASK.format(names=", ".join(results_for)) if results_for else ""
-    messages = [{"role": "user", "content": SEARCH_PROMPT.format(day=day.strftime("%A %d %B %Y"),
-                                                                 context=context or "(not available)", results=ask)}]
-    retrieved, notes = set(), []
+    items = outlet_items(datetime.combine(day, datetime.now().time())) if feed_items is None else feed_items
+    prompt = SEARCH_PROMPT.format(day=day.strftime("%A %d %B %Y"), context=context or "(not available)", results=ask)
+    messages = [{"role": "user", "content": with_feeds(prompt, items)}]
+    retrieved, notes = {it["link"] for it in items}, []
     try:
         for _ in range(4):                                                 # resume if the server pauses a long turn
-            resp = client.beta.messages.create(
-                model=MODEL, max_tokens=16000, messages=messages, tools=[tool], output_config={"effort": "medium"},
-                betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+            resp = create(client, False, model=MODEL, max_tokens=16000, messages=messages, tools=[tool],
+                          output_config={"effort": "medium"}, betas=["server-side-fallback-2026-07-01"],
+                          fallbacks="default")
             for b in resp.content:
                 if b.type == "web_search_tool_result" and isinstance(b.content, list):
                     retrieved |= {r.url for r in b.content if getattr(r, "url", None)}
@@ -334,10 +421,11 @@ def web_news(day: date, client=None, max_searches: int = 10, context: str = "", 
             messages = messages[:1] + [{"role": "assistant", "content": resp.content}]
         if not notes or not retrieved:
             return {**empty, "note": "no news found"}
+        from .feeds import material
+        notes_all = "\n".join(notes)[:60000] + ("\n\nOUTLET FEED ITEMS:\n" + material(items, 80) if items else "")
         parsed = client.beta.messages.parse(
             model=MODEL, max_tokens=16000, output_format=NewsList, output_config={"effort": "low"},
-            messages=[{"role": "user", "content": STRUCTURE_PROMPT.format(day=day.isoformat(),
-                                                                          notes="\n".join(notes)[:60000])}],
+            messages=[{"role": "user", "content": STRUCTURE_PROMPT.format(day=day.isoformat(), notes=notes_all)}],
             betas=["server-side-fallback-2026-07-01"], fallbacks="default")
         out = parsed.parsed_output or NewsList(items=[])
     except anthropic.APIError as e:
