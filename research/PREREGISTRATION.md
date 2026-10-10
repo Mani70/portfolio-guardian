@@ -754,3 +754,41 @@ held to the next). Paper prices are NSE's closing prices from the day's F&O file
 prices and cost model as the test; the paper run reports, for each position, what it would be worth if closed at
 today's close. Nothing in the paper run changes a verdict: the 14-year test decides, the paper run checks the
 mechanics.
+
+## Addendum 21 (10 Oct 2026, before any of it runs): one disciplined search for a short-term edge
+
+Owner's question: can history give a strategy with an outstanding record? A search over many rules finds a good-
+looking one by chance, so the whole search space, the selection rule and the bar are fixed here, the choice is made on
+2012-2019 only, and each family's single choice is tested ONCE on 2020-2026. A high win rate is not the goal: the
+measure is profit after all costs.
+
+Search space (256 variants, counted in research/search21.py and checked):
+- F1 swing, stocks (the 100 most traded EQ stocks each month, survivorship-free; long only; 10 stocks a day,
+  equal weights; bought at the next open, sold at the close H sessions later, H in {1, 5, 10, 20}; delivery costs;
+  with and without the market filter (Nifty 50 above its 200-day average)): reversal (the 10 worst over N in {1, 3,
+  5, 10} sessions); breakout (closes at an N-session high, N in {20, 55, 120, 250}, the 10 nearest to it by
+  momentum); momentum (the 10 best over N in {21, 63, 126, 252} sessions, skipping the last); pullback in an uptrend
+  (above the 200-day average, 2-day RSI below {5, 10, 20}); volume surge (an up day on {2, 3} x the 20-day volume).
+  17 signals x 4 holds x 2 = 136.
+- F2 intraday, stocks (same universe; bought or sold short at the open, closed at the same day's close; intraday
+  costs): buy gap-downs of {1, 2, 3, 4}%+, short gap-ups of {1, 2, 3, 4}%+, buy yesterday's 10 biggest losers, short
+  yesterday's 10 biggest gainers; with and without the market filter. 10 x 2 = 20.
+- F3 Nifty options (research/fo20.py data, costs and strike choice; monthly and weekly cycles; one lot):
+  bull put spreads, short strike {2, 3, 4, 5}% below, width {2, 3}% (16), the same only when the Nifty is above its
+  200-day average (16); iron condors, short strikes {3, 4, 5, 6}% away, width {2, 3}% (16); each of these 48 credit
+  spreads held to expiry or closed once it can be bought back for half the credit received (x2 = 96); long
+  straddle / strangle (at the money, 2% away; 4). 100.
+
+Selection (2012-2019): for each variant, net profit per trade after costs, t-statistic with trades grouped by entry
+date (stocks; Newey-West over the holding period) or by cycle (options). A variant qualifies only if its t >= 3.5
+(the Bonferroni bar for 256 tries at 5%, one-sided) AND it is profitable in both 2012-2015 and 2016-2019. The
+qualifying variant with the highest t in each family is that family's single choice; a family with none qualifying
+has no choice and is reported as such.
+
+Test (2020-2026, once): the choice passes if its mean net profit is above zero with t >= 2 AND, on the ₹3.84 lakh
+account, it beats the benchmark (F1/F2: the Nifty 50 total return; F3: the liquid fund + 2 points a year) with a worst
+fall no deeper than 25%. Caveat: 2019-2026 was already seen for Addendum 20's base option strategies (two of the 100
+F3 variants); the rest of the space has not been looked at in that period.
+
+What changes: a family choice that passes goes to a paper run (at least 3 months) and then to the owner. A search
+with no pass ends the short-term research: the published video says so plainly.
