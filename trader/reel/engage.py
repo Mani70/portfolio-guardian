@@ -12,7 +12,7 @@ from typing import List
 from . import render
 
 # music to search in Instagram's library, per series (instrumental only, 10-15% volume)
-MUSIC = {"MYTH vs SACH": "lofi / quirky", "MARKET AAJ": "news / corporate", "RAAT KI REPORT": "calm / ambient",
+MUSIC = {"MYTH vs SACH": "lofi / quirky", "PAISA KI PATHSHALA": "study / lofi", "MARKET AAJ": "news / corporate", "RAAT KI REPORT": "calm / ambient",
          "NEWS SAMJHO": "news / corporate", "MARKET KI KAHANI": "suspense / thriller",
          "COMPANY KI KUNDLI": "documentary / inspiring", "BREAKING SAMJHO": "news / urgent",
          "ZAROORI KHABAR": "news / urgent"}

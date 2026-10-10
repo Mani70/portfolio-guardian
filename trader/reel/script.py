@@ -24,7 +24,7 @@ DISCLAIMER_SCREEN = "Education only. Not investment advice. Not a SEBI-registere
 CAPTION_DISCLAIMER = ("Education only - not investment advice. Not a SEBI-registered investment adviser or research "
                       "analyst. Past results do not guarantee future returns.")
 SERIES = {"myth": "MYTH vs SACH", "news": "NEWS SAMJHO", "story": "MARKET KI KAHANI", "market": "MARKET AAJ",
-          "company": "COMPANY KI KUNDLI", "night": "RAAT KI REPORT"}
+          "company": "COMPANY KI KUNDLI", "night": "RAAT KI REPORT", "pathshala": "PAISA KI PATHSHALA"}
 
 SYSTEM = """You write one 45-60 second Instagram Reel in Hinglish - Hindi-first, with the English words young Indians use (share, fund, profit, Nifty), written in Roman letters - for people with NO investment background, mostly from Hindi-speaking India.
 
@@ -247,6 +247,15 @@ def _brief(facts: dict) -> str:
         if n.get("history"):
             parts.append(f"HISTORY for this type of news (may be quoted as an average, not a prediction): {n['history']}")
         parts.append("Beat kinds to use: hook, news, explain, history, takeaway, question.")
+    elif f == "pathshala":
+        t, point = facts["lesson"]
+        parts += [f"PAISA KI PATHSHALA - a {facts['total']}-day course from zero to confident investor. Today is DIN "
+                  f"{facts['day_no']} of {facts['total']}: '{t}'.",
+                  f"THE LESSON (explain only this, simply): {point}",
+                  "Make it stick: one desi example or analogy (chai, cricket, ghar ka budget...), one common mistake "
+                  "people make about it, and a one-line recap. Say 'Din {n}' early so viewers follow the course. No "
+                  "numbers beyond the lesson's own; no advice.".replace("{n}", str(facts["day_no"])),
+                  "Beat kinds to use: hook, explain, story, twist, takeaway, question."]
     elif f == "night":
         parts += [NIGHT_RULES, "TODAY'S STORIES AND FACTS (use only these):", facts["night_text"],
                   "Beat kinds to use: hook, news, explain, history, market, watch, takeaway, question."]
@@ -349,6 +358,10 @@ def template(facts: dict) -> ReelScript:
                        on_screen=f"{n['symbol']}: news")]
         if n.get("history"):
             beats.append(Scene(kind="history", narration=n["history"], on_screen="Itihaas kya kehta hai"))
+    elif f == "pathshala":
+        t, point = facts["lesson"]
+        beats = [Scene(kind="hook", narration=f"Paisa ki pathshala, din {facts['day_no']}: {t}.", on_screen=t[:40]),
+                 Scene(kind="explain", narration=point, on_screen=t[:40])]
     elif f == "night":
         beats = [Scene(kind="news", narration=f"Aaj ki badi khabar: {t}.", on_screen=t[:40])
                  for t in facts["night_lines"][:6]]

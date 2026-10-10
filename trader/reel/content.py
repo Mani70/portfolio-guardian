@@ -106,6 +106,91 @@ MYTHS = [
     ("Kam fees se kya hi farak padta hai?", LESSON["Trading cost ka asar"], "Compounding"),
 ]
 
+# PAISA KI PATHSHALA: a numbered course, beginner to advanced - (title, the point in plain words). Timeless facts
+# only: no prices, no tax rates or limits that change with each budget (the lesson says "check the current rule").
+PATHSHALA = [
+    ("Share kya hota hai", "A share is a small piece of ownership of a company. If a company has 100 crore shares and "
+     "you own 100, you own that tiny part of its business - its profits and its risks."),
+    ("Stock exchange kya hai", "NSE and BSE are stock exchanges: regulated markets where buyers and sellers of shares "
+     "meet through brokers. The exchange matches orders; it does not decide the price."),
+    ("SEBI kaun hai", "SEBI (Securities and Exchange Board of India) is the market regulator. It makes the rules for "
+     "companies, brokers, mutual funds and advisers, and acts against fraud."),
+    ("Demat aur trading account", "A trading account places your buy and sell orders; a demat account holds your shares "
+     "electronically, like a bank account for shares. Your shares should always be in your own demat account."),
+    ("Share ka price kaise badalta hai", "A share's price moves with demand and supply: more buyers than sellers push it "
+     "up, more sellers push it down. Expectations about the company's future profits drive both."),
+    ("Market cap", "Market capitalisation is the share price times the number of shares - the value the market puts on "
+     "the whole company today. Large, mid and small caps are companies sorted by this size."),
+    ("Index: Nifty aur Sensex", "An index tracks a basket of shares. The Nifty 50 follows 50 large NSE companies, the "
+     "Sensex 30 large BSE companies. When people say 'market upar gaya', they usually mean the index."),
+    ("IPO kya hota hai", "An IPO (initial public offering) is when a company sells shares to the public for the first "
+     "time and lists on an exchange. A hyped IPO is not automatically a good business."),
+    ("Mutual fund kya hai", "A mutual fund pools money from many investors and a fund manager invests it in shares, "
+     "bonds or both. You own units of the fund; its value per unit is the NAV."),
+    ("SIP kya hai", "A SIP (systematic investment plan) invests a fixed amount every month. You buy more units when "
+     "prices are low and fewer when high, and the habit matters more than timing."),
+    ("Index fund vs active fund", "An index fund simply copies an index at a low fee; an active fund pays a manager to "
+     "try to beat it at a higher fee. Over long periods, many active funds do not beat their index after fees."),
+    ("Expense ratio", "The expense ratio is the yearly fee a fund charges, as a percentage of your money. A difference "
+     "of 1% a year sounds small but compounds into a big gap over 20 years."),
+    ("ETF kya hai", "An ETF (exchange traded fund) is a fund that trades on the exchange like a share - for example a "
+     "Nifty 50 ETF or a gold ETF. You need a demat account to buy one."),
+    ("Compounding ka jaadu", "Compounding means returns earning returns. Money growing 12% a year doubles in about 6 "
+     "years - the 'rule of 72': 72 divided by the yearly return gives the years to double."),
+    ("Inflation", "Inflation is prices rising over time, so the same rupee buys less. Money kept idle loses value; "
+     "investing aims to grow faster than inflation."),
+    ("Emergency fund pehle", "Before investing in shares, keep 6 months of expenses in a safe, easy-to-withdraw place. "
+     "Then a job loss or illness never forces you to sell shares at a bad time."),
+    ("Risk aur return", "Higher possible return comes with higher risk of loss. Anyone promising high returns with no "
+     "risk is either mistaken or running a scam."),
+    ("Asset allocation", "Asset allocation is how you split money between shares, bonds, gold and cash. It decides most "
+     "of your ups and downs - more than which single share you pick."),
+    ("Diversification", "Diversification means not putting everything in one share or sector. If one company fails, "
+     "the rest of your money is still working."),
+    ("Bull market, bear market", "A bull market is a long rise, a bear market a long fall (often 20% or more from the "
+     "top). Both have come and gone many times; nobody rings a bell at the turn."),
+    ("Volatility", "Volatility is how much prices swing. Shares can fall 30-50% in a bad year; investing money you need "
+     "soon in shares turns normal swings into real losses."),
+    ("Dividend", "A dividend is a share of profit a company pays to its shareholders. On the dividend date the share "
+     "price usually falls by about that amount - it is not free money."),
+    ("Bonus aur split", "In a bonus or a split you get more shares, but each is worth proportionally less. Your total "
+     "value does not change on that day."),
+    ("Buyback", "In a buyback a company buys back its own shares, usually at a fixed price. Fewer shares remain, so each "
+     "owns a slightly bigger part of the company."),
+    ("Revenue vs profit", "Revenue is all the money a company earns from sales; profit is what is left after every cost, "
+     "interest and tax. A company can grow revenue and still make a loss."),
+    ("EPS aur P/E", "EPS (earnings per share) is yearly profit divided by the number of shares. P/E is the share price "
+     "divided by EPS - how many years of today's profit you pay for."),
+    ("Balance sheet basics", "A balance sheet lists what a company owns (assets) and owes (liabilities); the difference "
+     "is the owners' share (equity). Too much debt is a common reason companies fail."),
+    ("Cash flow", "Profit is an accounting number; cash flow is real money coming in and going out. A company that "
+     "reports profits but never generates cash deserves a closer look."),
+    ("Quarterly results kaise padhein", "Look at revenue and profit against the same quarter last year, the margin "
+     "(profit per rupee of sales), debt, and what management said. One quarter is never the whole story."),
+    ("Futures kya hai", "A future is a contract to buy or sell at a fixed price on a future date. It needs only a margin "
+     "upfront, so gains and losses are many times larger than the money put in."),
+    ("Options kya hai", "An option gives the buyer a right, not an obligation, to buy (call) or sell (put) at a set "
+     "price by a date. The buyer pays a premium; most options expire worthless."),
+    ("F&O ka sach", "SEBI's study of FY22-FY24 found 93% of individual F&O traders lost money. Leverage makes small "
+     "moves into big losses."),
+    ("Trading ke kharche", "Every trade pays brokerage, STT, exchange fees, GST and stamp duty, plus slippage. Frequent "
+     "trading pays these again and again - costs quietly eat returns."),
+    ("Tax on gains (basics)", "Profits from shares are taxed as short-term or long-term capital gains depending on how "
+     "long you held them. Rates and limits change with budgets - always check the current rule."),
+    ("T+1 settlement", "In India, shares you buy reach your demat account one working day after the trade (T+1), and "
+     "money from a sale arrives the next working day."),
+    ("Circuit limit", "Exchanges set daily price bands (circuits) on many shares. When a share hits its limit, trading "
+     "is restricted - a sign of extreme demand or panic, not of value."),
+    ("Margin aur pledge", "Margin trading means borrowing to buy more than your money allows. Losses grow just as fast; "
+     "a broker can sell your pledged shares if the value falls."),
+    ("Nominee kyun zaroori", "Adding a nominee to your demat account, bank and funds makes sure your family can claim "
+     "the money easily. It takes a few minutes online."),
+    ("Registered adviser kaise check karein", "SEBI-registered investment advisers and research analysts are listed on "
+     "SEBI's website with registration numbers. Unregistered 'tips' sellers have no such accountability."),
+    ("Scam kaise pehchaane", "Red flags: guaranteed returns, pressure to act fast, Telegram/WhatsApp 'sure-shot' tips, "
+     "requests to pay into personal accounts. Complaints can go to SEBI's SCORES portal."),
+]
+
 # settled history only: court convictions, regulator orders, official data. Numbers here are the only numbers used.
 STORIES = [
     ("Harshad Mehta, 1992", "The Sensex rose from about 1,200 in mid-1991 to about 4,500 in April 1992 - almost 4 times. Harshad Mehta was "

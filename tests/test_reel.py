@@ -73,8 +73,15 @@ def test_numbers_are_spoken_as_an_indian_narrator_says_them():
 
 
 def test_morning_is_a_myth_episode_and_evening_falls_back_to_a_story(tmp_path):
-    m = job.facts_for(date(2026, 10, 12), "morning", {"myth": 4}, tmp_path / "none")
-    assert m["format"] == "myth" and m["episode"] == 5 and m["lesson"][1] and m["next"].endswith("?")
+    m = job.facts_for(date(2026, 10, 12), "morning", {"myth": 4}, tmp_path / "none")        # a Monday
+    assert m["format"] == "myth" and m["episode"] == 5 and m["lesson"][1] and m["next"] == content.PATHSHALA[0][0]
+    t = job.facts_for(date(2026, 10, 13), "morning", {"pathshala": 2}, tmp_path / "none")   # a Tuesday: the course
+    assert t["format"] == "pathshala" and t["day_no"] == 3 and t["lesson"] == content.PATHSHALA[2]
+    assert "DIN 3 of 40" in S._brief(t)
+    used = job.facts_for(date(2026, 10, 14), "morning", {"myth": 0, "_used": [content.MYTHS[0][0]]}, tmp_path)
+    assert used["myth"] == content.MYTHS[1][0]                                            # starters are skipped
+    sat = job.facts_for(date(2026, 10, 17), "evening", {"story": 1}, tmp_path / "none")
+    assert sat["format"] == "story" and sat["story"] == content.STORIES[1]                # Saturday night: a story
     e = job.facts_for(date(2026, 10, 12), "evening", {"story": 12}, tmp_path / "none")
     assert e["format"] == "story" and e["story"] == content.STORIES[12 % len(content.STORIES)] and e["episode"] == 13
     # myths are questions, never instructions; history uses only what the regulator / courts settled
@@ -126,7 +133,8 @@ def test_full_reel_without_keys_builds_a_video_and_says_why(tmp_path, monkeypatc
     assert job.run(said.append, lambda p, c: True, today=date(2026, 10, 12), out_dir=tmp_path, store=tmp_path / "none",
                    slot="evening").startswith("reel (evening): sent story")
     st = json.loads((tmp_path / "state.json").read_text())
-    assert st["episodes"] == {"myth": 1, "story": 1} and st["sent_evening"] == "2026-10-12"
+    assert {k: v for k, v in st["episodes"].items() if k != "_used"} == {"myth": 1, "story": 1}
+    assert len(st["episodes"]["_used"]) == 2 and st["sent_evening"] == "2026-10-12"
 
 
 def test_voice_text_is_kept_only_when_it_says_what_the_narration_says():

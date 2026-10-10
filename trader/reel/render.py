@@ -207,6 +207,7 @@ def story_card(headline: str, lines: List[str], source: str, out: Path, label: s
 SERIES_COLOURS = {"MYTH vs SACH": ((70, 14, 30), (150, 40, 50)), "MARKET AAJ": ((8, 30, 60), (20, 80, 140)),
                   "RAAT KI REPORT": ((15, 15, 45), (60, 30, 110)), "NEWS SAMJHO": ((12, 30, 40), (30, 90, 60)),
                   "MARKET KI KAHANI": ((25, 18, 40), (90, 50, 110)), "COMPANY KI KUNDLI": ((40, 30, 10), (130, 90, 20)),
+                  "PAISA KI PATHSHALA": ((10, 60, 50), (20, 130, 100)),
                   "BREAKING SAMJHO": ((90, 10, 20), (20, 20, 40)), "ZAROORI KHABAR": ((90, 10, 20), (20, 20, 40))}
 
 

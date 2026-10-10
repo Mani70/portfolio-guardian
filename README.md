@@ -420,7 +420,8 @@ first comment; you watch it and post it yourself. Each Reel is ONE topic, in one
 
 | Series | When | What |
 |---|---|---|
-| MYTH vs SACH | every morning | a popular market belief, checked against this project's own tests, and the concept behind it |
+| PAISA KI PATHSHALA | Tue, Thu, Sat, Sun mornings | a numbered 40-day course from zero to confident investor ("Din 1: Share kya hota hai" ... "Din 40: Scam kaise pehchaane"), taken in order |
+| MYTH vs SACH | Mon, Wed, Fri mornings | a popular market belief, checked against this project's own tests, and the concept behind it |
 | NEWS SAMJHO | evening, when there is notable news | one official NSE announcement from a heavily traded company, explained, with how shares reacted to that TYPE of news in the past (Addendum 22) - never a call on the share; routine ESOP allotments are skipped |
 | MARKET KI KAHANI | evening, otherwise | a settled episode of market history (Harshad Mehta, Satyam, 2008, Karvy, IL&FS...) told as a story, with its lesson |
 | MARKET AAJ | weekdays 19:15 (again 21:00 if NSE is late; holidays skip) | the day's market wrap: Nifty, Bank, Midcap, Smallcap, sectors, breadth, India VIX, FII/DII flows, the day's trusted news explained, what history says after such days (Addendum 23), and what is due on the next session. With it comes a **daily market brief** on Telegram with every news source link |

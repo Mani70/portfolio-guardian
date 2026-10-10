@@ -71,6 +71,28 @@ def market_facts(day: dict) -> dict:
             "next": "Kal phir market ka hisaab, isi time"}
 
 
+MYTH_DAYS = (0, 2, 4)                                                       # Mon, Wed, Fri; the course on the others
+
+
+def morning_plan(d: date, episodes: dict, used=()) -> tuple:
+    """(format, item) for the morning Reel of day d: MYTH vs SACH on Mon/Wed/Fri, PAISA KI PATHSHALA otherwise - each
+    taken in order (episode numbers), skipping topics already posted by hand (--topic), so nothing repeats until its
+    list is done."""
+    fmt, items = ("myth", content.MYTHS) if d.weekday() in MYTH_DAYS else ("pathshala", content.PATHSHALA)
+    n = episodes.get(fmt, 0)
+    for k in range(len(items)):
+        item = items[(n + k) % len(items)]
+        if item[0] not in used or k == len(items) - 1:
+            return fmt, item
+    return fmt, items[n % len(items)]
+
+
+def _teaser(d: date, episodes: dict, fmt: str, used=()) -> str:
+    after = {**episodes, fmt: episodes.get(fmt, 0) + 1}
+    f2, item = morning_plan(d + timedelta(days=1), after, used)
+    return item[0]
+
+
 def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = None, topic: str = "",
               day: Optional[dict] = None, out_dir: Path = OUT) -> dict:
     """What today's Reel in this slot is about (one topic) and its series' episode number. topic 'myth:N' or
@@ -100,7 +122,7 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
         f.update(market_facts(day))
         f["episode"] = episodes.get("market", 0) + 1
         return f
-    if slot == "evening" and day is not None and "stories" in day:       # the night bundle (night.gather)
+    if slot == "evening" and day is not None and "stories" in day and today.weekday() != 5:   # night bundle
         if len(day["stories"]) >= 2:
             f.update(format="night", night_text=night.sheet(day), companies=[s["company"] for s in day["stories"]
                                                                              if s["company"]],
@@ -117,9 +139,19 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
     macro = (saved or {}).get("news") or []
     news = content.news_item(today, store) if slot == "evening" and not macro else None
     if slot == "morning":
-        myth, truth, lesson = content.pick(content.MYTHS, today)
-        f.update(format="myth", myth=myth, truth=truth, lesson=(lesson, content.LESSON[lesson]),
-                 next=content.pick(content.MYTHS, today + timedelta(days=1))[0])
+        used = episodes.get("_used", [])
+        fmt, item = morning_plan(today, episodes, used)
+        if fmt == "myth":
+            myth, truth, lesson = item
+            f.update(format="myth", myth=myth, truth=truth, lesson=(lesson, content.LESSON[lesson]))
+        else:
+            f.update(format="pathshala", lesson=item, day_no=episodes.get("pathshala", 0) % len(content.PATHSHALA) + 1,
+                     total=len(content.PATHSHALA))
+        f["next"] = _teaser(today, episodes, fmt, used)
+    elif slot == "evening" and today.weekday() == 5:                       # Saturday night: always a story
+        n = episodes.get("story", 0)
+        f.update(format="story", story=content.STORIES[n % len(content.STORIES)],
+                 next="Kal subah: paisa ki pathshala")
     elif results:                                                           # results day: the biggest company's results
         f.update(format="news", results=results[0], companies=[results[0]["company"]])
     elif macro:                                                             # the day's top trusted news, explained
@@ -179,7 +211,9 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
     cover = render.cover(series, facts["episode"], sc.scenes[0].on_screen or sc.title, work / "cover.png", handle)
     return {"video": video, "caption": caption, "script": sc, "script_source": source, "format": facts["format"],
             "voice": ", ".join(sorted(voices)), "news": facts.get("news"), "question": sc.scenes[-1].narration,
-            "cover": cover, "series": series, "checklist": engage.checklist(series, sc.scenes[-1].narration, cover)}
+            "cover": cover, "series": series,
+            "topic_title": facts.get("myth") or (facts.get("lesson") or ("",))[0] if facts["format"] in ("myth", "pathshala")
+            else (facts.get("story") or ("",))[0], "checklist": engage.checklist(series, sc.scenes[-1].narration, cover)}
 
 
 def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, store=None,
@@ -193,6 +227,8 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
     if sent == today.isoformat() and not force:
         return f"reel ({slot}): already sent today"
     episodes = st.get("episodes", {})
+    if "_used" not in episodes and episodes.get("myth", 0) >= 2:           # the 3 starter Reels (--topic myth:0,
+        episodes["_used"] = [content.MYTHS[0][0], content.MYTHS[13][0], content.STORIES[0][0]]   # story:0, myth:13)
     day = None
     if slot == "company":
         sym, name = company.pick(episodes.get("company", 0))
@@ -204,7 +240,7 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
             notify(f"Company case study skipped this week ({name}): {note}.")
             return f"reel (company): skipped - {note}"
         topic = ""
-    if slot == "evening" and not topic:
+    if slot == "evening" and not topic and today.weekday() != 5:
         try:
             day = night.gather(today, out_dir, client)
         except Exception as e:                                             # noqa: BLE001 - fall back to the old evening
@@ -241,6 +277,10 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
             log.warning("carousel/poll: %s", e)
     out_dir.mkdir(parents=True, exist_ok=True)
     episodes[r["format"]] = episodes.get(r["format"], 0) + 1
+    if r["format"] in ("myth", "pathshala", "story"):
+        title = r.get("topic_title")
+        if title:
+            episodes["_used"] = (episodes.get("_used", []) + [title])[-80:]
     st.update({"sent_" + slot: today.isoformat(), "episodes": episodes, "video_" + slot: str(r["video"])})
     if slot == "market" and day is not None:
         st["polls"] = day["polls"][-40:]
