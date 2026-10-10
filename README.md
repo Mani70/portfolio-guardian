@@ -413,6 +413,26 @@ Each evening one plain-language Telegram message says what is open, what it woul
 each position can lose, and the running total. The verdict comes from the 14-year test (`research/fo20.py`), not
 from the paper weeks; state in `trader/state/fo_paper.json`.
 
+### Daily education Reel for Instagram (trader/reel)
+`trader.run reel` (every day 07:40 IST) makes a 60-90 second vertical Hinglish video and sends it to you on Telegram
+with a ready-to-paste caption; you watch it and post it yourself. Each Reel: a hook, one plain money lesson, one fact
+from this project's own tests, and (when there is one) an official NSE announcement from a heavily traded company,
+explained - with how shares reacted to that TYPE of news in the past (research Addendum 22), never a call on the share.
+
+Education only (SEBI's Jan 2025 circular: unregistered people may not give investment advice or make performance
+claims). The script is written by Claude from the facts the bot passes in, then checked by rules: no instruction to
+buy or sell, no target or stop-loss for a share, no prediction, no promise, no price next to a named company. A script
+that fails twice is replaced by a plain template. Every Reel ends with the same spoken disclaimer, and the caption
+carries it too. Check SEBI's current rules before posting; this is not legal advice.
+
+Setup (once): add three keys to the OCI Vault secret, next to the others -
+`ANTHROPIC_API_KEY` (console.anthropic.com), `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` (elevenlabs.io: pick a
+Hindi-English voice in the Voice Library and copy its voice ID). Optionally put your handle in trader.yaml:
+```yaml
+reel: {handle: "@yourhandle"}
+```
+Without the keys the job still sends a silent video from a template, and its note says which key is missing.
+
 # Phase 6: Running on an OCI server (Oracle Linux 9)
 
 Files in `deploy/oci/`:
