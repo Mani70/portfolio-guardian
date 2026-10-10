@@ -33,6 +33,10 @@ STYLE = {  # kind: (label, top colour, bottom colour)
     "question": ("AAPKA JAWAB?", (10, 50, 90), (30, 100, 170)),
     "lesson": ("SAMJHO", (10, 40, 70), (12, 110, 120)),
     "research": ("HUMARA TEST", (30, 20, 60), (150, 60, 40)),
+    "market": ("AAJ KA MARKET", (8, 30, 60), (20, 80, 140)),
+    "sector": ("SECTORS", (30, 30, 70), (70, 60, 150)),
+    "flows": ("PAISA KISNE LAGAYA", (20, 50, 40), (40, 120, 90)),
+    "watch": ("KAL KYA DEKHNA HAI", (50, 30, 10), (140, 80, 20)),
     "disclaimer": ("ZAROORI BAAT", (20, 20, 20), (60, 60, 60)),
 }
 FOOTER = "Education only  •  Not investment advice"

@@ -2,7 +2,7 @@
 # Runs one scheduled job: logs to logs/cron/<job>.log, never two copies of the same job at once,
 # a time limit per job, and a Telegram alert if the job fails or times out.
 #
-#   deploy/oci/job.sh intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|insights|fo-paper|reel|reel-evening|reboot
+#   deploy/oci/job.sh intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|insights|fo-paper|reel|reel-market|reel-evening|reboot
 set -uo pipefail
 
 APP="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -29,7 +29,8 @@ case "$job" in
   fo-paper)    limit=20m; cmd=(-m trader.run fo-paper) ;;
   reel)        limit=30m; cmd=(-m trader.run reel) ;;
   reel-evening) limit=30m; cmd=(-m trader.run reel --slot evening) ;;
-  *) echo "usage: $0 intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|insights|fo-paper|reel|reel-evening|reboot" >&2; exit 2 ;;
+  reel-market) limit=40m; cmd=(-m trader.run reel --slot market) ;;
+  *) echo "usage: $0 intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|insights|fo-paper|reel|reel-market|reel-evening|reboot" >&2; exit 2 ;;
 esac
 
 mkdir -p logs/cron

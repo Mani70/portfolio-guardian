@@ -1,8 +1,10 @@
 """The daily Reels: facts -> script (checked) -> voice -> video -> Telegram for the owner to review and post.
 
   python -m trader.run reel                   # morning (cron 07:40): MYTH vs SACH
-  python -m trader.run reel --slot evening    # evening (cron 18:40, if reel.evening is on): NEWS SAMJHO when there
-                                              # is notable official news, else MARKET KI KAHANI
+  python -m trader.run reel --slot market     # weekdays after the close (cron 19:15, again 21:00 if NSE was late):
+                                              # the daily market brief on Telegram + the MARKET AAJ Reel
+  python -m trader.run reel --slot evening    # evening (cron 21:30, if reel.evening is on): NEWS SAMJHO on the day's
+                                              # top trusted news, else MARKET KI KAHANI
 Each slot is sent once a day (--force makes another; --topic myth:N / story:N picks the topic, e.g. for the
 first Reels: python -m trader.run reel --force --topic myth:13).
 """
@@ -15,14 +17,50 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
-from . import content, numbers, render, script as S, voice
+from . import content, market, numbers, render, script as S, voice
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "cache" / "reel"
 log = logging.getLogger("trader.reel")
 
 
-def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = None, topic: str = "") -> dict:
+def market_facts(day: dict) -> dict:
+    """The compiled market day as the script's facts: a fact sheet for Claude and plain lines for the template."""
+    b = day["broad"]
+    lines = [f"{n} closed {v['close']:,.0f}, {v['pct']:+.2f}% today" for n, v in b.items()]
+    adv, dec = day["breadth"]
+    if adv is not None:
+        lines.append(f"Nifty 500 mein {int(adv)} shares upar, {int(dec)} neeche")
+    if day["sectors"]:
+        (wn, wp), (bn, bp) = day["sectors"][0], day["sectors"][-1]
+        lines.append(f"Sabse aage {bn} sector {bp:+.2f}%, sabse peeche {wn} {wp:+.2f}%")
+    sheet = ["SCOREBOARD: " + "; ".join(lines)]
+    vix, vixp = day["vix"]
+    if vix is not None:
+        sheet.append(f"INDIA VIX (fear gauge: expected swings of the Nifty): {vix:.2f}, {vixp:+.2f}% today")
+    if day["fii"] is not None:
+        sheet.append(f"FLOWS (provisional, ₹ crore): foreign investors (FII) net {day['fii']:+,.0f}; Indian funds "
+                     f"(DII) net {day['dii']:+,.0f}" if day["dii"] is not None else f"FII net {day['fii']:+,.0f}")
+    sheet.append("SECTORS today: " + ", ".join(f"{n} {p:+.2f}%" for n, p in day["sectors"][::-1]))
+    for it in day["news"]:
+        sheet.append(f"NEWS ({'official source' if it['official'] else 'two outlets'}): {it['headline']}. {it['facts']} "
+                     f"Why it matters: {it['why_it_matters']}"
+                     + (f" The {it['sector']} index moved {it['sector_today']:+.2f}% today." if it.get("sector_today")
+                        is not None else ""))
+    f = day.get("filing")
+    if f:
+        sheet.append(f"NSE FILING: {f['symbol']} - {f['subject']}." + (f" History for this type: {f['history']}"
+                                                                        if f.get("history") else ""))
+    sheet += [f"HISTORY: {h}" for h in day["history"]]
+    if day["calendar"]:
+        sheet.append("NEXT SESSION: " + "; ".join(day["calendar"]))
+    companies = sorted({c for it in day["news"] for c in it.get("companies", [])})
+    return {"format": "market", "market_text": "\n".join(sheet), "market_lines": lines, "companies": companies,
+            "next": "Kal phir market ka hisaab, isi time"}
+
+
+def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = None, topic: str = "",
+              day: Optional[dict] = None, out_dir: Path = OUT) -> dict:
     """What today's Reel in this slot is about (one topic) and its series' episode number. topic 'myth:N' or
     'story:N' picks one by its number in content.MYTHS / content.STORIES instead (e.g. for the first Reels)."""
     f = {"date": today.isoformat()}
@@ -39,11 +77,20 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
             f.update(format="story", story=items[int(n)], next="Market ki ek aur sachchi kahani")
         f["episode"] = episodes.get(f["format"], 0) + 1
         return f
-    news = content.news_item(today, store) if slot == "evening" else None
+    if slot == "market":
+        f.update(market_facts(day))
+        f["episode"] = episodes.get("market", 0) + 1
+        return f
+    saved = market.load_saved(today, out_dir) if slot == "evening" else None
+    macro = (saved or {}).get("news") or []
+    news = content.news_item(today, store) if slot == "evening" and not macro else None
     if slot == "morning":
         myth, truth, lesson = content.pick(content.MYTHS, today)
         f.update(format="myth", myth=myth, truth=truth, lesson=(lesson, content.LESSON[lesson]),
                  next=content.pick(content.MYTHS, today + timedelta(days=1))[0])
+    elif macro:                                                             # the day's top trusted news, explained
+        it = macro[0]
+        f.update(format="news", macro=it, history=[h for h in saved.get("history", []) if it["sector"] in h])
     elif news:
         f.update(format="news", news=news)
     else:
@@ -56,8 +103,8 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
 
 def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = None, handle: str = "",
          voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
-         slot: str = "morning", episodes: Optional[dict] = None, topic: str = "") -> dict:
-    facts = facts_for(today, slot, episodes or {}, store, topic)
+         slot: str = "morning", episodes: Optional[dict] = None, topic: str = "", day: Optional[dict] = None) -> dict:
+    facts = facts_for(today, slot, episodes or {}, store, topic, day, out_dir)
     sc, source = S.write(facts, client)
     work = out_dir / f"work_{today:%Y%m%d}_{slot}"
     if work.exists():
@@ -79,13 +126,15 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
     caption = f"{top}\n\n{sc.caption}\n\n{S.CAPTION_DISCLAIMER}\n\n{tags}"
     if facts.get("news"):
         caption += f"\n\nSource: NSE announcement, {facts['news']['symbol']} ({facts['news']['date']})"
+    if facts.get("macro"):
+        caption += "\n\nSources: " + ", ".join(sorted({market._domain(u) for u in facts["macro"]["source_urls"]}))
     return {"video": video, "caption": caption, "script": sc, "script_source": source, "format": facts["format"],
             "voice": ", ".join(sorted(voices)), "news": facts.get("news"), "question": sc.scenes[-1].narration}
 
 
 def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, store=None,
         handle: str = "", voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
-        force: bool = False, slot: str = "morning", topic: str = "") -> str:
+        force: bool = False, slot: str = "morning", topic: str = "", holidays=(), search: bool = True) -> str:
     today = today or date.today()
     state_p = out_dir / "state.json"
     st = json.loads(state_p.read_text()) if state_p.exists() else {}
@@ -93,7 +142,15 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
     if sent == today.isoformat() and not force:
         return f"reel ({slot}): already sent today"
     episodes = st.get("episodes", {})
-    r = make(today, out_dir, client, store, handle, voice_model, voice_id, speak, slot, episodes, topic)
+    day = None
+    if slot == "market" and not topic:
+        day = market.compile_day(today, store or content.ROOT / "cache" / "insights", holidays, client, search=search)
+        if day is None:
+            return "reel (market): no market session today, or NSE's closing data is not out yet"
+        market.save(day, out_dir)
+        for part in market.parts(market.brief(day)):
+            notify(part)
+    r = make(today, out_dir, client, store, handle, voice_model, voice_id, speak, slot, episodes, topic, day)
     ok = send_video(r["video"], f"🎬 {slot.title()} Reel ({today:%a %d %b}) - review before posting")
     notes = [f"📝 Instagram caption (copy-paste):\n\n{r['caption']}",
              "Before you post: watch it once; check the news source on nseindia.com if a company is named.\n"

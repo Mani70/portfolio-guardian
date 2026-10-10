@@ -423,6 +423,15 @@ first comment; you watch it and post it yourself. Each Reel is ONE topic, in one
 | MYTH vs SACH | every morning | a popular market belief, checked against this project's own tests, and the concept behind it |
 | NEWS SAMJHO | evening, when there is notable news | one official NSE announcement from a heavily traded company, explained, with how shares reacted to that TYPE of news in the past (Addendum 22) - never a call on the share; routine ESOP allotments are skipped |
 | MARKET KI KAHANI | evening, otherwise | a settled episode of market history (Harshad Mehta, Satyam, 2008, Karvy, IL&FS...) told as a story, with its lesson |
+| MARKET AAJ | weekdays 19:15 (again 21:00 if NSE is late; holidays skip) | the day's market wrap: Nifty, Bank, Midcap, Smallcap, sectors, breadth, India VIX, FII/DII flows, the day's trusted news explained, what history says after such days (Addendum 23), and what is due on the next session. With it comes a **daily market brief** on Telegram with every news source link |
+
+Trusted news (Addendum 23, enforced in `trader/reel/market.py`): an official NSE announcement, or an item found by a
+web search limited to official sites (RBI, SEBI, PIB, exchanges, US government) and established business outlets,
+kept only with one official source or two different outlets among the pages actually retrieved. Index and sector
+moves are reported as market commentary; a company is named only with its news, never with a price or move of the
+last 30 days (SEBI's price-data rule for education). "What next" is only history from Addenda 22-23, as an average,
+or "no reliable pattern". The 21:30 evening Reel (NEWS SAMJHO) explains the day's top trusted news when there is one.
+The news search costs about $0.10-0.30 a day of Anthropic credit (8 searches + reading).
 
 Built for watch time (research notes: `trader/reel/RESEARCH.md`): a hook in the first beat, 8-12 beats with a new
 picture every beat, word-by-word captions with the current word highlighted, a progress bar, big numbers, trimmed
@@ -444,7 +453,8 @@ reel:
   voice_id: <ID>                       # optional: overrides ELEVENLABS_VOICE_ID from the vault
   voice_model: eleven_multilingual_v2  # default eleven_flash_v2_5; eleven_v3 is the most expressive
   speak: devanagari                    # the voice reads Hindi words in Devanagari (captions stay Roman); default roman
-  evening: true                        # the second daily Reel (news explained, or a market-history story)
+  evening: true                        # the 21:30 Reel (the day's top news explained, or a market-history story)
+  market: true                         # the weekday MARKET AAJ wrap + daily brief (default on)
 ```
 **Choosing the voice:** `trader.run voices` sends Telegram clips of the same Hinglish lines read by your own voices and
 the most used Hindi voices of the Voice Library (about 3k credits); `trader.run voices --voice <ID>` reads them 4 ways

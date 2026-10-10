@@ -23,7 +23,7 @@ DISCLAIMER_SPOKEN = "यह सिर्फ़ education है, investment advi
 DISCLAIMER_SCREEN = "Education only. Not investment advice. Not a SEBI-registered adviser."
 CAPTION_DISCLAIMER = ("Education only - not investment advice. Not a SEBI-registered investment adviser or research "
                       "analyst. Past results do not guarantee future returns.")
-SERIES = {"myth": "MYTH vs SACH", "news": "NEWS SAMJHO", "story": "MARKET KI KAHANI"}
+SERIES = {"myth": "MYTH vs SACH", "news": "NEWS SAMJHO", "story": "MARKET KI KAHANI", "market": "MARKET AAJ"}
 
 SYSTEM = """You write one 45-60 second Instagram Reel in Hinglish - Hindi-first, with the English words young Indians use (share, fund, profit, Nifty), written in Roman letters - for people with NO investment background, mostly from Hindi-speaking India.
 
@@ -50,7 +50,7 @@ Each beat also has "spoken": the SAME words for the voice - Hindi words in Devan
 
 class Scene(BaseModel):
     kind: Literal["hook", "myth", "truth", "proof", "explain", "news", "history", "story", "twist", "takeaway",
-                  "question"]
+                  "question", "market", "sector", "flows", "watch"]
     narration: str = Field(description="What the voice says: 1-2 short sentences, Hinglish in Roman letters (shown as captions)")
     spoken: str = Field(default="", description="The same narration for the voice: Hindi words in Devanagari, English "
                                                 "words in English letters, the same numbers as digits")
@@ -86,9 +86,10 @@ HI_COMMAND = re.compile(_plain(r"खरीद(?:ो|िए|ें|\s?लो)|ब
 HI_ACTION = re.compile(_plain(r"खरीद|बेच|टारगेट|होल्ड"))
 HI_PREDICT = re.compile(_plain(r"बढेगा|बढेगी|गिरेगा|गिरेगी|ऊपर जाएगा|नीचे जाएगा|रैली करेगा|क्रैश होगा"))
 NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+PCT = re.compile(r"\d\s?%|\d\s?percent|\d\s?pratishat", re.I)
 
 
-def check(script: ReelScript, companies: List[str]) -> List[str]:
+def check(script: ReelScript, companies: List[str], strict: bool = False) -> List[str]:
     """Problems that make a script unsafe to publish (empty list = fine)."""
     issues = []
     words = sum(len(s.narration.split()) for s in script.scenes)
@@ -110,10 +111,16 @@ def check(script: ReelScript, companies: List[str]) -> List[str]:
             issues.append(f"scene {i}: '{ACTION.search(text).group(0)}' next to a named company")
         if named and PRICE.search(text):
             issues.append(f"scene {i}: a price next to a named company")
+        if named and strict and PCT.search(text):
+            issues.append(f"scene {i}: a move (%) next to a named company")
     for rx in (PROMISE, COMMAND, PREDICT):
         if rx.search(script.caption):
             issues.append(f"caption: '{rx.search(script.caption).group(0)}'")
     return issues
+
+
+def _words(script: ReelScript) -> int:
+    return sum(len(s.narration.split()) for s in script.scenes)
 
 
 def vet_spoken(script: ReelScript, companies: List[str]) -> List[str]:
@@ -152,6 +159,14 @@ def _spoken_issues(s: Scene, named: bool) -> List[str]:
     return out
 
 
+MARKET_RULES = """This is the weekday MARKET AAJ wrap (60-75 seconds, 10-14 beats, 150-190 words): what the market did today, the day's trusted news explained, what history says, and what is due on the next session.
+- Index and sector moves (Nifty, Bank, IT ...) may be said with their numbers.
+- A company may be named only with its news - NEVER with its share price or its % move (SEBI rule). Keep company names out of any beat that has a % number.
+- "What next" may only be the HISTORY lines given (always "an average, not a prediction") or "history shows no reliable pattern". Never say what will happen tomorrow.
+- Explain FII/DII, VIX and any term the first time it appears, in plain words.
+- Hook: the single most striking fact of the day (a big move, a big news) - no greeting."""
+
+
 def _brief(facts: dict) -> str:
     f = facts["format"]
     parts = [f"Today's date: {facts['date']}. Series: {SERIES[f]}, episode {facts.get('episode', 1)}."]
@@ -160,6 +175,15 @@ def _brief(facts: dict) -> str:
                   f"WHAT OUR OWN PRE-REGISTERED TESTS FOUND (the reveal; say it as a past result): {facts['truth']}",
                   f"CONCEPT TO EXPLAIN SIMPLY: {facts['lesson'][0]} - {facts['lesson'][1]}",
                   "Beat kinds to use: hook, myth, twist, truth, proof, explain, takeaway, question."]
+    elif f == "news" and facts.get("macro"):
+        m = facts["macro"]
+        parts += [f"NEWS ({'official source' if m['official'] else 'two established outlets'}; explain what it means "
+                  f"for a beginner, no forecast, no stock call, never a company's share price or move): {m['headline']}. "
+                  f"{m['facts']}", f"WHY IT MATTERS (general facts): {m['why_it_matters']}"]
+        if m.get("sector_today") is not None:
+            parts.append(f"The {m['sector']} index moved {m['sector_today']:+.2f}% today (an index, may be said).")
+        parts += [f"HISTORY (quote only as an average, not a prediction): {h}" for h in facts.get("history", [])]
+        parts.append("Beat kinds to use: hook, news, explain, history, takeaway, question.")
     elif f == "news":
         n = facts["news"]
         parts += ["NEWS (official NSE announcement; explain what it means for a beginner, do not mention any price, do "
@@ -167,6 +191,9 @@ def _brief(facts: dict) -> str:
         if n.get("history"):
             parts.append(f"HISTORY for this type of news (may be quoted as an average, not a prediction): {n['history']}")
         parts.append("Beat kinds to use: hook, news, explain, history, takeaway, question.")
+    elif f == "market":
+        parts += [MARKET_RULES, "TODAY'S MARKET FACTS (use only these):", facts["market_text"],
+                  "Beat kinds to use: hook, market, sector, flows, news, explain, history, watch, question."]
     else:
         t, story, lesson = facts["story"]
         parts += [f"TRUE STORY from Indian market history - {t}: {story}", f"ITS LESSON: {lesson}",
@@ -179,7 +206,9 @@ def _brief(facts: dict) -> str:
 
 def write(facts: dict, client=None) -> tuple[ReelScript, str]:
     """(script, source): source is 'claude' or 'template' (no key, refusal, error or failed checks)."""
-    companies = [facts["news"]["symbol"]] if facts.get("news") else []
+    companies = (([facts["news"]["symbol"]] if facts.get("news") else []) + list(facts.get("companies", []))
+                 + list((facts.get("macro") or {}).get("companies", [])))
+    strict = facts.get("format") == "market" or bool(facts.get("macro"))
     if not os.getenv("ANTHROPIC_API_KEY") and client is None:
         return template(facts), "template (no ANTHROPIC_API_KEY)"
     import anthropic
@@ -200,7 +229,9 @@ def write(facts: dict, client=None) -> tuple[ReelScript, str]:
         if resp.stop_reason == "refusal" or resp.parsed_output is None:
             return template(facts), "template (Claude declined)"
         script = resp.parsed_output
-        issues = check(script, companies)
+        issues = check(script, companies, strict)
+        if facts.get("format") == "market":                               # the wrap is a little longer
+            issues = [i for i in issues if not i.startswith("narration is") or not 120 <= _words(script) <= 230]
         if not issues:
             for d in vet_spoken(script, companies):
                 log.warning("voice text not used, %s", d)
@@ -220,12 +251,27 @@ def template(facts: dict) -> ReelScript:
         beats = [Scene(kind="hook", narration=facts["myth"], on_screen=facts["myth"][:40]),
                  Scene(kind="truth", narration="Humare test ka sach: " + facts["truth"], on_screen="Humare test ka sach"),
                  Scene(kind="explain", narration=f"{t}: {point}", on_screen=t[:40])]
+    elif f == "news" and facts.get("macro"):
+        m = facts["macro"]
+        parts += [f"NEWS ({'official source' if m['official'] else 'two established outlets'}; explain what it means "
+                  f"for a beginner, no forecast, no stock call, never a company's share price or move): {m['headline']}. "
+                  f"{m['facts']}", f"WHY IT MATTERS (general facts): {m['why_it_matters']}"]
+        if m.get("sector_today") is not None:
+            parts.append(f"The {m['sector']} index moved {m['sector_today']:+.2f}% today (an index, may be said).")
+        parts += [f"HISTORY (quote only as an average, not a prediction): {h}" for h in facts.get("history", [])]
+        parts.append("Beat kinds to use: hook, news, explain, history, takeaway, question.")
+    elif f == "news" and facts.get("macro"):
+        m = facts["macro"]
+        beats = [Scene(kind="news", narration=f"{m['headline']}. {m['facts']}", on_screen=m["sector"] + " news"),
+                 Scene(kind="explain", narration=m["why_it_matters"], on_screen="Iska matlab")]
     elif f == "news":
         n = facts["news"]
         beats = [Scene(kind="news", narration=f"Aaj NSE par {n['symbol']} ne announce kiya: {n['subject']}.",
                        on_screen=f"{n['symbol']}: news")]
         if n.get("history"):
             beats.append(Scene(kind="history", narration=n["history"], on_screen="Itihaas kya kehta hai"))
+    elif f == "market":
+        beats = [Scene(kind="market", narration=line, on_screen=line[:40]) for line in facts["market_lines"][:6]]
     else:
         t, story, lesson = facts["story"]
         beats = [Scene(kind="story", narration=story, on_screen=t[:40]),
