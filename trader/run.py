@@ -593,7 +593,7 @@ def cmd_reel(cfg, args) -> int:
     n = Notifier(dry_run=args.dry_run)
     rc = cfg.get("reel") or {}
     print(run(n.send, n.send_video, handle=str(rc.get("handle", "")), voice_model=rc.get("voice_model"),
-              voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman"))))
+              voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman")), force=args.force))
     return 0
 
 
@@ -858,7 +858,7 @@ def main(argv=None) -> int:
     ap.add_argument("command", choices=sorted(COMMANDS))
     ap.add_argument("--config")
     ap.add_argument("--dry-run", action="store_true", help="print messages instead of sending Telegram")
-    ap.add_argument("--force", action="store_true", help="swing-plan: run even before 15:35")
+    ap.add_argument("--force", action="store_true", help="swing-plan: run even before 15:35; reel: make another even if today's was sent")
     ap.add_argument("--symbol", default="NIFTYBEES", help="test-order: instrument (default NIFTYBEES)")
     ap.add_argument("--pct", type=float, default=3.0, help="test-order: limit this %% below the last price")
     ap.add_argument("--yes", action="store_true", help="test-order: don't ask before sending")

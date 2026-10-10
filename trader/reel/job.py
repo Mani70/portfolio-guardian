@@ -47,11 +47,12 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
 
 
 def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, store=None,
-        handle: str = "", voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman") -> str:
+        handle: str = "", voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
+        force: bool = False) -> str:
     today = today or date.today()
     state_p = out_dir / "state.json"
     st = json.loads(state_p.read_text()) if state_p.exists() else {}
-    if st.get("sent") == today.isoformat():
+    if st.get("sent") == today.isoformat() and not force:
         return "reel: already sent today"
     r = make(today, out_dir, client, store, handle, voice_model, voice_id, speak)
     ok = send_video(r["video"], f"🎬 Today's Reel ({today:%a %d %b}) - review before posting")

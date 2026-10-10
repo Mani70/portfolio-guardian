@@ -60,6 +60,8 @@ def test_full_reel_without_keys_builds_a_video_and_says_why(tmp_path, monkeypatc
     assert msg.startswith("reel: sent") and videos and videos[0].stat().st_size > 10_000
     assert "Education only - not investment advice" in said[0] and "Voice: silence (no ElevenLabs key)" in said[1]
     assert job.run(said.append, lambda p, c: True, today=date(2026, 10, 12), out_dir=tmp_path) == "reel: already sent today"
+    assert job.run(said.append, lambda p, c: True, today=date(2026, 10, 12), out_dir=tmp_path, store=tmp_path / "none",
+                   force=True).startswith("reel: sent")
 
 
 def test_voice_text_is_kept_only_when_it_says_what_the_narration_says():
