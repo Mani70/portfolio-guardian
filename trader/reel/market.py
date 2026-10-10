@@ -301,7 +301,8 @@ def web_news(day: date, client=None, max_searches: int = 10, context: str = "") 
 
 
 # ---------------------------------------------------------------- the day
-def compile_day(today: date, store: Path, holidays=(), client=None, get=None, search: bool = True) -> Optional[dict]:
+def compile_day(today: date, store: Path, holidays=(), client=None, get=None, search: bool = True,
+                hist_path: Optional[Path] = None, fetch=None, polls: Optional[List[dict]] = None) -> Optional[dict]:
     """Everything the brief and the Reel use, or None when today was not a session or NSE's data is not out yet."""
     from trader.holidays import is_session
     if not is_session(today, holidays):
@@ -341,6 +342,23 @@ def compile_day(today: date, store: Path, holidays=(), client=None, get=None, se
            "news": news, "news_note": note, "drivers": web["drivers"], "cues": web["cues"], "filing": filing, "history": [h for h in hist if h],
            "next_session": next_session(today, holidays).isoformat(),
            "calendar": calendar(get, next_session(today, holidays), store)}
+    charts = []
+    try:                                                                   # chart reading: index level only
+        h = index_history(hist_path or ROOT / "cache" / "reel" / "index_hist.csv", today,
+                          {n: ix[n]["close"] for n in CHART if n in ix}, fetch, holidays)
+        for n, (label, key) in CHART.items():
+            if key in h and n in ix:
+                f = chart_facts(label, h[key], ix[n].get("high52"), ix[n].get("low52"))
+                if f:
+                    charts += chart_lines(f)
+    except Exception as e:                                                 # noqa: BLE001 - optional extra
+        log.warning("chart: %s", e)
+    day["chart"] = charts
+    o = options_sentiment(today)
+    day["options"] = options_line(o) if o else None
+    reveal, polls = poll_reveal(list(polls or []), today, nifty.get("pct"))
+    day["poll_reveal"] = reveal
+    day["polls"] = polls + [{"asked": today.isoformat()}]
     for it in news:                                                        # the sector's own move today, as context
         k = next((k for k, v in SECTORS.items() if v == it["sector"]), None)
         it["sector_today"] = ix[k]["pct"] if k in ix else None
@@ -400,6 +418,13 @@ def brief(day: dict) -> str:
         lines += [f"• NSE filing - {f['symbol']}: {f['subject']} ({f['type']})"]
         if f.get("history"):
             lines.append(f"  History for this type: {f['history']}")
+    if day.get("chart") or day.get("options"):
+        lines += ["", "CHART READING (index level; describes, never predicts)"] + [f"• {c}" for c in day.get("chart", [])]
+        if day.get("options"):
+            lines.append(f"• {day['options']}")
+        lines.append(f"• {CHART_HONESTY}")
+    if day.get("poll_reveal"):
+        lines += ["", "VIEWERS' POLL", f"• {day['poll_reveal']}"]
     if day["history"]:
         lines += ["", "WHAT HISTORY SAYS (our own studies; never a forecast)"] + [f"• {h}" for h in day["history"]]
     if day["calendar"]:
@@ -431,3 +456,134 @@ def load_saved(today: date, out_dir: Path) -> Optional[dict]:
     return json.loads(p.read_text()) if p.exists() else None
 
 
+
+
+# ---------------------------------------------------------------- chart reading (index technical analysis)
+CHART = {"NIFTY 50": ("Nifty 50", "nifty50"), "NIFTY BANK": ("Nifty Bank", "niftybank")}
+
+
+def index_history(path: Path, today: date, closes: Dict[str, float], fetch=None, holidays=(),
+                  sessions: int = 320) -> pd.DataFrame:
+    """Daily closes of the chart indices, kept in cache; filled from NSE's daily index files the first time."""
+    from trader import index_data as I
+    from trader.holidays import is_session
+    h = pd.read_csv(path, parse_dates=["date"]).set_index("date") if path.exists() else pd.DataFrame()
+    if len(h) < 210:
+        if fetch is None:
+            s = requests.Session()
+            fetch = lambda url: s.get(url, headers=I.HEADERS, timeout=20)    # noqa: E731
+        rows, d, n = {}, today - timedelta(days=1), 0
+        while n < sessions and d > today - timedelta(days=sessions * 2):
+            if is_session(d, holidays):
+                n += 1
+                try:
+                    r = fetch(I.URL.format(d=d))
+                    if r.status_code == 200 and "index name" in r.text[:300].lower():
+                        c = I.parse(r.text)
+                        rows[pd.Timestamp(d)] = {key: c.get(key) for _, key in CHART.values()}
+                except Exception as e:                                    # noqa: BLE001 - keep what we have
+                    log.warning("index file %s: %s", d, e)
+            d -= timedelta(days=1)
+        if rows:
+            h = pd.concat([h, pd.DataFrame.from_dict(rows, orient="index")])
+    today_row = {key: closes.get(name) for name, (_, key) in CHART.items()}
+    h = pd.concat([h, pd.DataFrame([today_row], index=[pd.Timestamp(today)])])
+    h = h[~h.index.duplicated(keep="last")].sort_index().tail(400)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    h.rename_axis("date").to_csv(path)
+    return h
+
+
+def rsi(s: pd.Series, n: int = 14) -> float:
+    d = s.diff().dropna().tail(n * 5)
+    up, down = d.clip(lower=0).ewm(alpha=1 / n).mean().iloc[-1], (-d.clip(upper=0)).ewm(alpha=1 / n).mean().iloc[-1]
+    return float(100 - 100 / (1 + up / down)) if down > 0 else 100.0
+
+
+def chart_facts(name: str, s: pd.Series, high52: Optional[float], low52: Optional[float]) -> Optional[dict]:
+    """What a chart-reader looks at, as facts: averages, distance from the 52-week range, RSI, the day streak."""
+    s = s.dropna()
+    if len(s) < 200:
+        return None
+    c = float(s.iloc[-1])
+    avg = {n: float(s.tail(n).mean()) for n in (20, 50, 200)}
+    moves = s.diff().dropna()
+    sign = 1 if moves.iloc[-1] > 0 else -1
+    streak = 0
+    for m in moves.iloc[::-1]:
+        if (m > 0) == (sign > 0) and m != 0:
+            streak += 1
+        else:
+            break
+    return {"name": name, "close": c, "avg": avg, "above": {n: c > v for n, v in avg.items()},
+            "gap200": (c / avg[200] - 1) * 100, "rsi": rsi(s), "streak": streak * sign,
+            "from_high": (c / high52 - 1) * 100 if high52 else None, "from_low": (c / low52 - 1) * 100 if low52 else None,
+            "high52": high52, "low52": low52}
+
+
+def chart_lines(f: dict) -> List[str]:
+    a = f["above"]
+    where = ("above all three averages (20, 50 and 200 days)" if all(a.values()) else
+             "below all three averages (20, 50 and 200 days)" if not any(a.values()) else
+             "above the " + ", ".join(f"{n}-day" for n in (20, 50, 200) if a[n]) + " average and below the "
+             + ", ".join(f"{n}-day" for n in (20, 50, 200) if not a[n]))
+    out = [f"{f['name']} closed {f['close']:,.0f}, {where}; the 200-day average is {f['avg'][200]:,.0f} "
+           f"({f['gap200']:+.1f}% away)."]
+    if f["from_high"] is not None:
+        out.append(f"{f['name']} is {abs(f['from_high']):.1f}% below its 52-week high ({f['high52']:,.0f}) and "
+                   f"{f['from_low']:.1f}% above its 52-week low ({f['low52']:,.0f}).")
+    rs = f["rsi"]
+    zone = "above 70 - the zone chart-readers call 'overbought'" if rs > 70 else (
+        "below 30 - the zone chart-readers call 'oversold'" if rs < 30 else "between 30 and 70, a neutral zone")
+    out.append(f"{f['name']} 14-day RSI (a 0-100 momentum gauge) is {rs:.0f}, {zone}.")
+    if abs(f["streak"]) >= 3:
+        out.append(f"{f['name']} has closed {'up' if f['streak'] > 0 else 'down'} {abs(f['streak'])} sessions in a row.")
+    return out
+
+
+CHART_HONESTY = ("Chart levels describe where the index stands, not where it will go: in our own pre-registered "
+                 "tests, short-term rules built on such signals did not beat the market after costs (Addenda 21, 23).")
+
+
+# ---------------------------------------------------------------- index options sentiment (NSE's F&O file)
+def options_sentiment(today: date) -> Optional[dict]:
+    """Nifty options of the nearest expiry: put-call ratio of open interest and the strikes with the most open
+    interest. None if NSE's F&O file for today is not out yet."""
+    try:
+        from trader import fo_paper
+        df = fo_paper.fetch_day(today)
+    except Exception as e:                                                # noqa: BLE001 - optional extra
+        log.warning("F&O file: %s", e)
+        return None
+    if df is None or df.empty:
+        return None
+    opt = df[df["kind"].isin(["CE", "PE"])]
+    if opt.empty:
+        return None
+    e = opt["expiry"].min()
+    x = opt[opt["expiry"] == e]
+    ce, pe = x[x["kind"] == "CE"], x[x["kind"] == "PE"]
+    if ce["oi"].sum() <= 0 or pe.empty:
+        return None
+    return {"expiry": pd.Timestamp(e).date().isoformat(), "pcr": float(pe["oi"].sum() / ce["oi"].sum()),
+            "call_wall": float(ce.loc[ce["oi"].idxmax(), "strike"]), "put_wall": float(pe.loc[pe["oi"].idxmax(), "strike"])}
+
+
+def options_line(o: dict) -> str:
+    return (f"Nifty options expiring {datetime.fromisoformat(o['expiry']):%d %b}: put-call ratio of open interest "
+            f"{o['pcr']:.2f} (puts held per call - a sentiment number, not a signal); the most open call contracts are "
+            f"at {o['call_wall']:,.0f} and the most open put contracts at {o['put_wall']:,.0f}.")
+
+
+# ---------------------------------------------------------------- the viewers' poll
+def poll_reveal(polls: List[dict], today: date, nifty_pct: Optional[float]) -> tuple[Optional[str], List[dict]]:
+    """Yesterday's question 'will the Nifty close up or down?' answered with today's close; the running tally."""
+    if nifty_pct is None or not polls or polls[-1].get("result") or polls[-1]["asked"] >= today.isoformat():
+        return None, polls
+    polls[-1]["result"] = "UP" if nifty_pct > 0 else "DOWN"
+    done = [p for p in polls if p.get("result")][-20:]
+    ups = sum(p["result"] == "UP" for p in done)
+    text = (f"Yesterday's poll: will the Nifty close up or down? Answer: {polls[-1]['result']} ({nifty_pct:+.2f}%). "
+            f"Over the last {len(done)} poll{'s' if len(done) != 1 else ''} the Nifty closed up {ups} of {len(done)} - "
+            "nobody can call a single day reliably.")
+    return text, polls

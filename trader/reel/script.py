@@ -23,7 +23,8 @@ DISCLAIMER_SPOKEN = "यह सिर्फ़ education है, investment advi
 DISCLAIMER_SCREEN = "Education only. Not investment advice. Not a SEBI-registered adviser."
 CAPTION_DISCLAIMER = ("Education only - not investment advice. Not a SEBI-registered investment adviser or research "
                       "analyst. Past results do not guarantee future returns.")
-SERIES = {"myth": "MYTH vs SACH", "news": "NEWS SAMJHO", "story": "MARKET KI KAHANI", "market": "MARKET AAJ"}
+SERIES = {"myth": "MYTH vs SACH", "news": "NEWS SAMJHO", "story": "MARKET KI KAHANI", "market": "MARKET AAJ",
+          "company": "COMPANY KI KUNDLI"}
 
 SYSTEM = """You write one 45-60 second Instagram Reel in Hinglish - Hindi-first, with the English words young Indians use (share, fund, profit, Nifty), written in Roman letters - for people with NO investment background, mostly from Hindi-speaking India.
 
@@ -89,7 +90,7 @@ NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 PCT = re.compile(r"\d\s?%|\d\s?percent|\d\s?pratishat", re.I)
 
 
-def check(script: ReelScript, companies: List[str], strict: bool = False) -> List[str]:
+def check(script: ReelScript, companies: List[str], strict: bool = False, company_mode: bool = False) -> List[str]:
     """Problems that make a script unsafe to publish (empty list = fine)."""
     issues = []
     words = sum(len(s.narration.split()) for s in script.scenes)
@@ -107,6 +108,12 @@ def check(script: ReelScript, companies: List[str], strict: bool = False) -> Lis
             m = rx.search(text)
             if m:
                 issues.append(f"scene {i}: {what} '{m.group(0)}'")
+        if company_mode:
+            from .company import BANNED
+            m = BANNED.search(text)
+            if m:
+                issues.append(f"scene {i}: '{m.group(0)}' - the case study is about the business, never the share")
+            continue
         if named and ACTION.search(text):
             issues.append(f"scene {i}: '{ACTION.search(text).group(0)}' next to a named company")
         if named and PRICE.search(text):
@@ -165,7 +172,18 @@ MARKET_RULES = """This is the weekday MARKET AAJ wrap (60-75 seconds, 10-14 beat
 - "What next" may only be the HISTORY lines given (always "an average, not a prediction") or "history shows no reliable pattern". Never say what will happen tomorrow.
 - Explain FII/DII, VIX and any term the first time it appears, in plain words.
 - "Why it moved" may only use the WHY IT MOVED lines (say "reports ke mutabik"); global cues only from GLOBAL CUE lines.
+- If YESTERDAY'S VIEWER POLL is given, reveal it in beat 2 or 3 ("kal ke poll ka jawab...").
+- CHART lines are index-level chart reading: describe them simply (what a 200-day average or RSI is) and say the CHART HONESTY line in your own words. Never turn a level into a forecast ("yahan se upar jayega" is forbidden).
+- OPTIONS DATA: explain put-call ratio in one plain sentence; it is a mood number, not a signal.
+- The LAST beat (kind "question") is always the poll: "Kal Nifty upar band hoga ya neeche? Comment mein UP ya DOWN likho - kal isi time jawab." Viewers guess; we never do.
 - Hook: the single most striking fact of the day (a big move, a big news) - no greeting."""
+
+
+COMPANY_RULES = """This is COMPANY KI KUNDLI: a 60-75 second story of one well-known Indian company (10-14 beats, 150-190 words) - what it does, how it earns money, how big it is, its turning points, the risks it reports - so that a beginner understands the business.
+- Never mention its share price, market value, valuation (P/E, cheap/expensive), a target, or any view on buying or selling the share. This is about the business, not the stock.
+- Use only the facts given, with their years. Revenue, profit and growth numbers may be said.
+- Hook: a surprising fact about the business (e.g. how many people use it). Explain every term (revenue, profit, debt) the first time.
+- The last beat (kind "question") asks viewers which of its products or services they use - comment mein batao - and teases next week's company if given."""
 
 
 def _brief(facts: dict) -> str:
@@ -192,6 +210,9 @@ def _brief(facts: dict) -> str:
         if n.get("history"):
             parts.append(f"HISTORY for this type of news (may be quoted as an average, not a prediction): {n['history']}")
         parts.append("Beat kinds to use: hook, news, explain, history, takeaway, question.")
+    elif f == "company":
+        parts += [COMPANY_RULES, "FACTS (use only these; every number as given):", facts["company_text"],
+                  "Beat kinds to use: hook, story, explain, sector, history, takeaway, question."]
     elif f == "market":
         parts += [MARKET_RULES, "TODAY'S MARKET FACTS (use only these):", facts["market_text"],
                   "Beat kinds to use: hook, market, sector, flows, news, explain, history, watch, question."]
@@ -210,6 +231,7 @@ def write(facts: dict, client=None) -> tuple[ReelScript, str]:
     companies = (([facts["news"]["symbol"]] if facts.get("news") else []) + list(facts.get("companies", []))
                  + list((facts.get("macro") or {}).get("companies", [])))
     strict = facts.get("format") == "market" or bool(facts.get("macro"))
+    company_mode = facts.get("format") == "company"
     if not os.getenv("ANTHROPIC_API_KEY") and client is None:
         return template(facts), "template (no ANTHROPIC_API_KEY)"
     import anthropic
@@ -230,8 +252,12 @@ def write(facts: dict, client=None) -> tuple[ReelScript, str]:
         if resp.stop_reason == "refusal" or resp.parsed_output is None:
             return template(facts), "template (Claude declined)"
         script = resp.parsed_output
-        issues = check(script, companies, strict)
-        if facts.get("format") == "market":                               # the wrap is a little longer
+        issues = check(script, companies, strict, company_mode)
+        if company_mode:
+            from .company import BANNED
+            if BANNED.search(script.caption):
+                issues.append(f"caption: '{BANNED.search(script.caption).group(0)}'")
+        if facts.get("format") in ("market", "company"):                               # the wrap is a little longer
             issues = [i for i in issues if not i.startswith("narration is") or not 120 <= _words(script) <= 230]
         if not issues:
             for d in vet_spoken(script, companies):
@@ -271,15 +297,20 @@ def template(facts: dict) -> ReelScript:
                        on_screen=f"{n['symbol']}: news")]
         if n.get("history"):
             beats.append(Scene(kind="history", narration=n["history"], on_screen="Itihaas kya kehta hai"))
+    elif f == "company":
+        beats = [Scene(kind="story", narration=line[:200], on_screen=line[:40]) for line in facts["company_lines"][:6]]
     elif f == "market":
         beats = [Scene(kind="market", narration=line, on_screen=line[:40]) for line in facts["market_lines"][:6]]
+        beats.append(Scene(kind="question", narration="Kal Nifty upar band hoga ya neeche? Comment mein UP ya DOWN "
+                                                      "likho - kal isi time jawab.", on_screen="UP ya DOWN?"))
     else:
         t, story, lesson = facts["story"]
         beats = [Scene(kind="story", narration=story, on_screen=t[:40]),
                  Scene(kind="takeaway", narration="Seekh: " + lesson, on_screen="Seekh")]
-    beats.append(Scene(kind="question", narration="Aapka kya experience hai? Comment mein batao." + nxt,
-                       on_screen="Comment mein batao"))
+    if beats[-1].kind != "question":
+        beats.append(Scene(kind="question", narration="Aapka kya experience hai? Comment mein batao." + nxt,
+                           on_screen="Comment mein batao"))
     title = SERIES[f]
-    return ReelScript(title=title, scenes=beats, caption=f"{title} | aaj ka market lesson\nAapka kya experience hai? "
-                      "Comment mein batao.", hashtags=["stockmarketindia", "investing", "nifty50", "financialeducation",
+    return ReelScript(title=title, scenes=beats, caption=f"{title} | aaj ka market lesson\n{beats[-1].narration}",
+                      hashtags=["stockmarketindia", "investing", "nifty50", "financialeducation",
                                                       "hinglish"])

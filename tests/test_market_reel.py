@@ -27,8 +27,14 @@ FAKE = {
 
 
 def _patch_nse(monkeypatch, fake=FAKE):
+    import pandas as pd
     monkeypatch.setattr(market, "nse_session", lambda: None)
     monkeypatch.setattr(market, "_get", lambda s, path: fake.get(path))
+    closes = pd.Series([20000 + 10 * i for i in range(250)], dtype=float)          # a steady climb
+    monkeypatch.setattr(market, "index_history", lambda path, today, closes_now, fetch=None, holidays=():
+                        pd.DataFrame({"nifty50": closes.values, "niftybank": closes.values * 2}))
+    monkeypatch.setattr(market, "options_sentiment", lambda d: {"expiry": "2026-10-13", "pcr": 1.28,
+                                                                "call_wall": 23000.0, "put_wall": 22500.0})
 
 
 def test_snapshot_reads_closing_values_breadth_and_flows():
@@ -133,6 +139,7 @@ def test_market_slot_sends_the_brief_and_a_reel_and_the_evening_explains_the_top
                   store=tmp_path / "none", slot="market")
     assert msg.startswith("reel (market): sent market") and videos
     assert said[0].startswith("📊 DAILY MARKET BRIEF") and "US suspends PERM filings [official source]" in said[0]
+    assert "CHART READING" in said[0] and "above all three averages" in said[0] and "put-call ratio" in said[0]
     assert "WHY IT MOVED (as reported)" in said[0] and "Brent crude: $61 (reuters.com)" in said[0]
     assert "MARKET AAJ  •  EP 1" in said[1]
     saved = json.loads((tmp_path / "market_20261009.json").read_text())
@@ -153,3 +160,28 @@ def test_a_company_never_appears_with_a_move_in_the_market_wrap():
     issues = S.check(sc, ["Infosys"], strict=True)
     assert any("move (%) next to a named company" in i for i in issues)
     assert not any("scene 1" in i for i in issues)                          # index moves are fine
+
+
+def test_chart_facts_describe_the_index_and_the_poll_is_revealed_next_session(tmp_path):
+    import pandas as pd
+    s = pd.Series([100.0 + i for i in range(220)] + [318.0, 317.0, 316.0])
+    f = market.chart_facts("Nifty 50", s, 330.0, 100.0)
+    lines = " ".join(market.chart_lines(f))
+    assert "above all three averages" in lines and "closed down 3 sessions in a row" in lines and "overbought" in lines
+    text, polls = market.poll_reveal([{"asked": "2026-10-08"}], DAY, 1.3)
+    assert "Answer: UP (+1.30%)" in text and "closed up 1 of 1" in text and polls[-1]["result"] == "UP"
+    assert market.poll_reveal(polls, DAY, 1.3)[0] is None                    # answered once only
+    assert market.poll_reveal([{"asked": "2026-10-09"}], DAY, 1.3)[0] is None  # asked today: not yet
+
+
+def test_index_history_backfills_once_from_nse_daily_files(tmp_path):
+    from trader import index_data as I
+    calls = []
+
+    def fetch(url):
+        calls.append(url)
+        return SimpleNamespace(status_code=200, text="Index Name,Closing Index Value\nNifty 50,22000\nNifty Bank,50000\n")
+    h = market.index_history(tmp_path / "h.csv", DAY, {"NIFTY 50": 22520.45, "NIFTY BANK": 55256.65}, fetch,
+                             sessions=12)
+    assert len(calls) == 12 and len(h) == 13 and h["nifty50"].iloc[-1] == 22520.45
+    assert I.URL.format(d=date(2026, 10, 8)) in calls

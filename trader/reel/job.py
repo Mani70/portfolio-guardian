@@ -17,7 +17,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
-from . import content, market, numbers, render, script as S, voice
+from . import company, content, market, numbers, render, script as S, voice
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "cache" / "reel"
@@ -53,6 +53,13 @@ def market_facts(day: dict) -> dict:
                                                                         if f.get("history") else ""))
     sheet += [f"WHY IT MOVED (as reported by trusted outlets): {d['text']}" for d in day.get("drivers", [])]
     sheet += [f"GLOBAL CUE: {c['what']}: {c['value']}" for c in day.get("cues", [])]
+    sheet += [f"CHART (index level; describes, never predicts): {c}" for c in day.get("chart", [])]
+    if day.get("options"):
+        sheet.append(f"OPTIONS DATA: {day['options']}")
+    if day.get("chart"):
+        sheet.append(f"CHART HONESTY (say it): {market.CHART_HONESTY}")
+    if day.get("poll_reveal"):
+        sheet.append(f"YESTERDAY'S VIEWER POLL (reveal it early): {day['poll_reveal']}")
     sheet += [f"HISTORY: {h}" for h in day["history"]]
     if day["calendar"]:
         sheet.append("NEXT SESSION: " + "; ".join(day["calendar"]))
@@ -78,6 +85,13 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
         else:
             f.update(format="story", story=items[int(n)], next="Market ki ek aur sachchi kahani")
         f["episode"] = episodes.get(f["format"], 0) + 1
+        return f
+    if slot == "company":
+        f.update(format="company", company_text=company.fact_sheet(day), companies=[day["name"], day["symbol"]],
+                 company_lines=[day["business"]] + [x["text"] for k in ("how_it_earns", "numbers", "history")
+                                                    for x in day[k]],
+                 next=company.pick(episodes.get("company", 0) + 1)[1])
+        f["episode"] = episodes.get("company", 0) + 1
         return f
     if slot == "market":
         f.update(market_facts(day))
@@ -128,6 +142,8 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
     caption = f"{top}\n\n{sc.caption}\n\n{S.CAPTION_DISCLAIMER}\n\n{tags}"
     if facts.get("news"):
         caption += f"\n\nSource: NSE announcement, {facts['news']['symbol']} ({facts['news']['date']})"
+    if facts.get("format") == "company":
+        caption += "\n\nSources: " + ", ".join(sorted({market._domain(u) for u in company.sources(day)})[:6])
     if facts.get("macro"):
         caption += "\n\nSources: " + ", ".join(sorted({market._domain(u) for u in facts["macro"]["source_urls"]}))
     return {"video": video, "caption": caption, "script": sc, "script_source": source, "format": facts["format"],
@@ -145,8 +161,19 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
         return f"reel ({slot}): already sent today"
     episodes = st.get("episodes", {})
     day = None
+    if slot == "company":
+        sym, name = company.pick(episodes.get("company", 0))
+        if topic.startswith("company:"):
+            sym = topic.split(":", 1)[1].upper()
+            name = dict(company.COMPANIES).get(sym, sym)
+        day, note = company.research(sym, name, client)
+        if day is None:
+            notify(f"Company case study skipped this week ({name}): {note}.")
+            return f"reel (company): skipped - {note}"
+        topic = ""
     if slot == "market" and not topic:
-        day = market.compile_day(today, store or content.ROOT / "cache" / "insights", holidays, client, search=search)
+        day = market.compile_day(today, store or content.ROOT / "cache" / "insights", holidays, client, search=search,
+                                 hist_path=out_dir / "index_hist.csv", polls=st.get("polls", []))
         if day is None:
             return "reel (market): no market session today, or NSE's closing data is not out yet"
         market.save(day, out_dir)
@@ -165,6 +192,8 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
     out_dir.mkdir(parents=True, exist_ok=True)
     episodes[r["format"]] = episodes.get(r["format"], 0) + 1
     st.update({"sent_" + slot: today.isoformat(), "episodes": episodes, "video_" + slot: str(r["video"])})
+    if slot == "market" and day is not None:
+        st["polls"] = day["polls"][-40:]
     st.pop("sent", None)
     state_p.write_text(json.dumps(st))
     for old in sorted(out_dir.glob("work_*"))[:-6]:                         # keep the last few days' working files

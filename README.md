@@ -424,6 +424,7 @@ first comment; you watch it and post it yourself. Each Reel is ONE topic, in one
 | NEWS SAMJHO | evening, when there is notable news | one official NSE announcement from a heavily traded company, explained, with how shares reacted to that TYPE of news in the past (Addendum 22) - never a call on the share; routine ESOP allotments are skipped |
 | MARKET KI KAHANI | evening, otherwise | a settled episode of market history (Harshad Mehta, Satyam, 2008, Karvy, IL&FS...) told as a story, with its lesson |
 | MARKET AAJ | weekdays 19:15 (again 21:00 if NSE is late; holidays skip) | the day's market wrap: Nifty, Bank, Midcap, Smallcap, sectors, breadth, India VIX, FII/DII flows, the day's trusted news explained, what history says after such days (Addendum 23), and what is due on the next session. With it comes a **daily market brief** on Telegram with every news source link |
+| COMPANY KI KUNDLI | Sundays 10:40 | one well-known company (26 in rotation, `--topic company:SYMBOL` for a chosen one): what it does, how it earns, its size, turning points and the risks it reports - every fact from a trusted page the search retrieved; never its share price, market value, valuation, a target or a buy/sell view (`trader/reel/company.py`) |
 
 Trusted news (Addendum 23, enforced in `trader/reel/market.py`): an official NSE announcement, or an item found by a
 web search limited to official sites (RBI, SEBI, PIB, exchanges, US government) and established business outlets,
@@ -431,6 +432,13 @@ kept only with one official source or two different outlets among the pages actu
 moves are reported as market commentary; a company is named only with its news, never with a price or move of the
 last 30 days (SEBI's price-data rule for education). "What next" is only history from Addenda 22-23, as an average,
 or "no reliable pattern". The 21:30 evening Reel (NEWS SAMJHO) explains the day's top trusted news when there is one.
+
+MARKET AAJ also carries **chart reading at index level** (Nifty 50 and Nifty Bank against their 20/50/200-day
+averages, the 52-week range, 14-day RSI, up/down streaks - SEBI's research rules exclude technical analysis of an index
+or sector), **index options sentiment** from NSE's F&O file (put-call ratio of open interest, the strikes with the most
+open contracts), always with the honest line that our tests found no short-term edge in such signals, and a **viewers'
+poll** ("Kal Nifty upar ya neeche? Comment mein UP ya DOWN") revealed the next session with a running tally - viewers
+guess, the bot never does.
 The same daily Claude call also collects **why the market and its sectors moved, as reported** by those outlets,
 and **global cues** (US indices' last close, Asian markets, Brent crude, the rupee); each needs a trusted page the
 search retrieved, and every sentence passes a SEBI check in code (no forecast, instruction or promise; no company
