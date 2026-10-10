@@ -51,6 +51,8 @@ def market_facts(day: dict) -> dict:
     if f:
         sheet.append(f"NSE FILING: {f['symbol']} - {f['subject']}." + (f" History for this type: {f['history']}"
                                                                         if f.get("history") else ""))
+    for r in day.get("results", []):
+        sheet.append(f"RESULTS TODAY - {r['company']} ({r['quarter']}): " + "; ".join(p["text"] for p in r["points"]))
     sheet += [f"WHY IT MOVED (as reported by trusted outlets): {d['text']}" for d in day.get("drivers", [])]
     sheet += [f"GLOBAL CUE: {c['what']}: {c['value']}" for c in day.get("cues", [])]
     sheet += [f"CHART (index level; describes, never predicts): {c}" for c in day.get("chart", [])]
@@ -63,7 +65,8 @@ def market_facts(day: dict) -> dict:
     sheet += [f"HISTORY: {h}" for h in day["history"]]
     if day["calendar"]:
         sheet.append("NEXT SESSION: " + "; ".join(day["calendar"]))
-    companies = sorted({c for it in day["news"] for c in it.get("companies", [])})
+    companies = sorted({c for it in day["news"] for c in it.get("companies", [])} |
+                       {r["company"] for r in day.get("results", [])})
     return {"format": "market", "market_text": "\n".join(sheet), "market_lines": lines, "companies": companies,
             "next": "Kal phir market ka hisaab, isi time"}
 
@@ -98,12 +101,15 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
         f["episode"] = episodes.get("market", 0) + 1
         return f
     saved = market.load_saved(today, out_dir) if slot == "evening" else None
+    results = (saved or {}).get("results") or []
     macro = (saved or {}).get("news") or []
     news = content.news_item(today, store) if slot == "evening" and not macro else None
     if slot == "morning":
         myth, truth, lesson = content.pick(content.MYTHS, today)
         f.update(format="myth", myth=myth, truth=truth, lesson=(lesson, content.LESSON[lesson]),
                  next=content.pick(content.MYTHS, today + timedelta(days=1))[0])
+    elif results:                                                           # results day: the biggest company's results
+        f.update(format="news", results=results[0], companies=[results[0]["company"]])
     elif macro:                                                             # the day's top trusted news, explained
         it = macro[0]
         f.update(format="news", macro=it, history=[h for h in saved.get("history", []) if it["sector"] in h])
@@ -144,6 +150,9 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
         caption += f"\n\nSource: NSE announcement, {facts['news']['symbol']} ({facts['news']['date']})"
     if facts.get("format") == "company":
         caption += "\n\nSources: " + ", ".join(sorted({market._domain(u) for u in company.sources(day)})[:6])
+    if facts.get("results"):
+        caption += "\n\nSources: " + ", ".join(sorted({market._domain(u) for x in facts["results"]["points"]
+                                                     for u in x["source_urls"]}))
     if facts.get("macro"):
         caption += "\n\nSources: " + ", ".join(sorted({market._domain(u) for u in facts["macro"]["source_urls"]}))
     return {"video": video, "caption": caption, "script": sc, "script_source": source, "format": facts["format"],

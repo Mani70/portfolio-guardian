@@ -439,6 +439,12 @@ or sector), **index options sentiment** from NSE's F&O file (put-call ratio of o
 open contracts), always with the honest line that our tests found no short-term edge in such signals, and a **viewers'
 poll** ("Kal Nifty upar ya neeche? Comment mein UP ya DOWN") revealed the next session with a running tally - viewers
 guess, the bot never does.
+
+**Quarterly results**: the brief lists results due on the next session (NSE's board-meeting calendar, companies trading
+at least ₹50 crore a day) and, on the day, RESULTS TODAY - revenue, profit, their change from a year earlier, the
+reasons the company gave and any dividend, each point from a trusted page the search retrieved (a result needs the
+company's filing or two outlets). On a big results day the 21:30 Reel explains the largest one (RESULTS SAMJHO).
+Business numbers may be said with the company's name; its share price or share move never (`script.share_talk`).
 The same daily Claude call also collects **why the market and its sectors moved, as reported** by those outlets,
 and **global cues** (US indices' last close, Asian markets, Brent crude, the rupee); each needs a trusted page the
 search retrieved, and every sentence passes a SEBI check in code (no forecast, instruction or promise; no company

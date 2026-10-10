@@ -122,7 +122,7 @@ def test_web_news_searches_only_trusted_sites_resumes_a_paused_turn_and_applies_
     assert len(c.calls) == 3 and c.calls[1]["messages"][1]["role"] == "assistant"    # resumed after pause_turn
     assert [i["headline"][:7] for i in items] == ["US susp"] and "IT +3.02%" in c.calls[0]["messages"][0]["content"]
     assert [d["text"][:8] for d in web["drivers"]] == ["IT index"] and web["cues"][0]["what"] == "Brent crude"
-    assert note.startswith("1 of 2 news items, 1 of 4 reasons and 1 of 1 global cues passed")
+    assert note.startswith("1 of 2 news items, 1 of 4 reasons, 1 of 1 global cues and 0 of 0 results passed")
 
 
 def test_market_slot_sends_the_brief_and_a_reel_and_the_evening_explains_the_top_news(tmp_path, monkeypatch):
@@ -131,7 +131,7 @@ def test_market_slot_sends_the_brief_and_a_reel_and_the_evening_explains_the_top
     _patch_nse(monkeypatch)
     news = [{"headline": "US suspends PERM filings", "facts": "f", "why_it_matters": "w", "sector": "IT",
              "companies": ["Infosys"], "source_urls": ["https://www.dol.gov/x"], "official": True}]
-    monkeypatch.setattr(market, "web_news", lambda d, c=None, max_searches=10, context="": {
+    monkeypatch.setattr(market, "web_news", lambda d, c=None, max_searches=10, context="", results_for=(): {
         "items": news, "note": "ok", "cues": [{"what": "Brent crude", "value": "$61", "source_urls": ["https://reuters.com/x"]}],
         "drivers": [{"text": "IT rose as the rupee fell", "sector": "IT", "source_urls": ["https://reuters.com/x"]}]})
     said, videos = [], []
@@ -185,3 +185,46 @@ def test_index_history_backfills_once_from_nse_daily_files(tmp_path):
                              sessions=12)
     assert len(calls) == 12 and len(h) == 13 and h["nifty50"].iloc[-1] == 22520.45
     assert I.URL.format(d=date(2026, 10, 8)) in calls
+
+
+def test_results_keep_business_numbers_drop_share_talk_and_need_trusted_sources():
+    got = {"https://www.nseindia.com/f", "https://www.reuters.com/r", "https://www.livemint.com/m"}
+    P = market.ResultPoint
+    rs = [market.ResultItem(company="TCS", quarter="Jul-Sep 2026", points=[
+              P(text="Revenue ₹65,000 crore, up 6% from a year earlier", source_urls=["https://www.nseindia.com/f"]),
+              P(text="Net profit ₹12,000 crore, up 8%", source_urls=["https://www.nseindia.com/f"]),
+              P(text="Shares rose 4% after the results", source_urls=["https://www.reuters.com/r"]),       # share move
+              P(text="Dividend of ₹10 a share", source_urls=["https://unknown.example/x"])]),           # not trusted
+          market.ResultItem(company="XYZ", quarter="Q2", points=[
+              P(text="Revenue up 5%", source_urls=["https://www.reuters.com/r"]),
+              P(text="Profit up 2%", source_urls=["https://www.reuters.com/r"])])]                       # one outlet only
+    kept = market.trusted_results(rs, got)
+    assert [r["company"] for r in kept] == ["TCS"] and len(kept[0]["points"]) == 2 and kept[0]["official"]
+    assert S.share_talk("TCS ka profit 8% badha, ₹12,000 crore raha.") == ""
+    assert S.share_talk("TCS ka profit badha aur shares 4% chadhe.") == "a move (%)"
+    assert S.share_talk("TCS ke shares ₹4,100 par band hue.") == "a price"
+
+
+def test_results_day_brief_and_the_evening_explains_the_biggest_result(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    _patch_nse(monkeypatch)
+    res = [{"company": "Tata Consultancy Services", "quarter": "Jul-Sep 2026", "official": True,
+            "points": [{"text": "Revenue ₹65,000 crore, up 6% from a year earlier",
+                        "source_urls": ["https://www.nseindia.com/f"]},
+                       {"text": "Net profit ₹12,000 crore, up 8%", "source_urls": ["https://www.nseindia.com/f"]}]}]
+    seen = {}
+
+    def fake_web(d, c=None, max_searches=10, context="", results_for=()):
+        seen["results_for"] = list(results_for)
+        return {"items": [], "drivers": [], "cues": [], "results": res, "note": "ok"}
+    monkeypatch.setattr(market, "web_news", fake_web)
+    monkeypatch.setattr(market, "results_due", lambda get, d, store, n=4: [("TCS", "Tata Consultancy Services")]
+                        if d == DAY else [])
+    said = []
+    job.run(said.append, lambda p, c: True, today=DAY, out_dir=tmp_path, store=tmp_path / "none", slot="market")
+    assert seen["results_for"] == ["Tata Consultancy Services"]
+    assert "RESULTS TODAY (business numbers; never the share)" in said[0] and "Net profit ₹12,000 crore" in said[0]
+    f = job.facts_for(DAY, "evening", {}, tmp_path / "none", out_dir=tmp_path)
+    assert f["format"] == "news" and f["results"]["company"] == "Tata Consultancy Services"
+    assert "RESULTS SAMJHO" in S._brief(f)

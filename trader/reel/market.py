@@ -112,19 +112,25 @@ def next_session(today: date, holidays) -> date:
     return d
 
 
-def calendar(get, day: date, store: Path, n: int = 4) -> List[str]:
-    """What is due on the next session: results of well-known companies (board meetings), and the weekly expiry."""
-    out = []
+def results_due(get, day: date, store: Path, n: int = 4) -> List[tuple]:
+    """(symbol, company) of well-known companies (traded >= ₹50 crore a day) whose board meets on `day` for results."""
     try:
         size = _traded_value(store)
         ev = [e for e in (get("event-calendar") or [])
               if datetime.strptime(e["date"], "%d-%b-%Y").date() == day and "result" in e.get("purpose", "").lower()]
-        ev.sort(key=lambda e: -size.get(e["symbol"], 0.0))
-        names = [e["company"].replace(" Limited", "").replace(" Ltd", "") for e in ev if size.get(e["symbol"], 0) >= 50][:n]
-        if names:
-            out.append("Quarterly results due: " + ", ".join(names))
     except (KeyError, ValueError, TypeError):
-        pass
+        return []
+    ev.sort(key=lambda e: -size.get(e["symbol"], 0.0))
+    return [(e["symbol"], re.sub(r"\s+(Limited|Ltd\.?)$", "", e["company"].strip())) for e in ev
+            if size.get(e["symbol"], 0) >= 50][:n]
+
+
+def calendar(get, day: date, store: Path, n: int = 4) -> List[str]:
+    """What is due on the next session: results of well-known companies (board meetings), and the weekly expiry."""
+    out = []
+    names = [c for _, c in results_due(get, day, store, n)]
+    if names:
+        out.append("Quarterly results due: " + ", ".join(names))
     if day.weekday() == 1:
         out.append("Nifty weekly options expiry (Tuesday)")
     return out
@@ -187,10 +193,24 @@ class Cue(BaseModel):
     source_urls: List[str]
 
 
+class ResultPoint(BaseModel):
+    text: str = Field(description="One result fact, e.g. 'Revenue Rs 65,000 crore in Jul-Sep 2026, up 6% from a year "
+                                  "earlier' or what management said - never the share price or move")
+    source_urls: List[str]
+
+
+class ResultItem(BaseModel):
+    company: str
+    quarter: str = Field(description="e.g. 'Jul-Sep 2026 (Q2 FY27)'")
+    points: List[ResultPoint] = Field(description="Revenue, profit, their change from a year earlier, the reasons "
+                                                  "the company gave, dividend - each with its source")
+
+
 class NewsList(BaseModel):
     items: List[NewsItem]
     drivers: List[Driver] = Field(default_factory=list)
     cues: List[Cue] = Field(default_factory=list)
+    results: List[ResultItem] = Field(default_factory=list)
 
 
 SEARCH_PROMPT = """Today is {day} (India). Today's closing figures from NSE:
@@ -200,10 +220,10 @@ Research three things, using only the search results:
 1. The 3-5 most important NEWS EVENTS of the last 24 hours for people who invest in Indian shares: government or regulator decisions (RBI, SEBI, Indian government, tax, budget), global events that concern Indian sectors (US Federal Reserve, US policy on visas, tariffs or trade, crude oil), and big corporate events of large Indian listed companies.
 2. WHY the market and its biggest-moving sectors moved today, as reported by the outlets (the reasons they give).
 3. GLOBAL CUES: the last close of the main US indices, Asian markets today, Brent crude, and the rupee against the US dollar - with their dates.
-
+{results}
 For each point give the facts with their dates and the URLs of the pages you used. Prefer official sources (government, regulator, exchange) where they exist. Skip rumours, opinions, stock tips, price targets and predictions."""
 
-STRUCTURE_PROMPT = """Turn these research notes into news items, drivers (why the market and sectors moved today, as reported) and global cues. Keep only things dated within the last 24 hours of {day}. Use only facts and URLs that appear in the notes; do not add anything. No forecasts, no price targets, no stock calls; in drivers, never name a company together with its share price or move. If something has no URL in the notes, leave it out.
+STRUCTURE_PROMPT = """Turn these research notes into news items, drivers (why the market and sectors moved today, as reported), global cues and company results (business numbers only - never share prices or share moves). Keep only things dated within the last 24 hours of {day}. Use only facts and URLs that appear in the notes; do not add anything. No forecasts, no price targets, no stock calls; in drivers, never name a company together with its share price or move. If something has no URL in the notes, leave it out.
 
 NOTES:
 {notes}"""
@@ -249,20 +269,42 @@ def safe_text(text: str, companies: List[str]) -> bool:
     return not (named and (PCT.search(text) or PRICE.search(text)))
 
 
-def web_news(day: date, client=None, max_searches: int = 10, context: str = "") -> dict:
+RESULTS_ASK = """4. QUARTERLY RESULTS announced today by: {names}. For each: the quarter, revenue and net profit with their change from a year earlier, the main reasons the company gave, any dividend - from the company's filing on nseindia.com / bseindia.com or established outlets. Business numbers only: no share price, no share move, no analyst targets."""
+
+
+def trusted_results(results: List[ResultItem], retrieved: set) -> List[dict]:
+    """A result stays with at least 2 sourced points and one official source or two different outlets; each point
+    must pass the share-talk check (business numbers yes, share price or move no)."""
+    from .script import share_talk
+    from .company import BANNED
+    out = []
+    for r in results:
+        pts = [{"text": p.text, "source_urls": _sourced(p, retrieved)} for p in r.points]
+        pts = [p for p in pts if p["source_urls"] and not share_talk(f"{r.company}: {p['text']}")
+               and not BANNED.search(p["text"])]
+        urls = {u for p in pts for u in p["source_urls"]}
+        official = any(_matches(_domain(u), OFFICIAL) for u in urls)
+        outlets = {_domain(u) for u in urls if _matches(_domain(u), OUTLETS)}
+        if len(pts) >= 2 and (official or len(outlets) >= 2):
+            out.append({"company": r.company, "quarter": r.quarter, "points": pts[:5], "official": official})
+    return out
+
+
+def web_news(day: date, client=None, max_searches: int = 10, context: str = "", results_for: List[str] = ()) -> dict:
     """{items, drivers, cues, note}. Claude searches only the trusted sites; the trust rule (items: one official
     source or two outlets; drivers and cues: one trusted page) and the SEBI sentence check are applied in code."""
     import os
 
     import anthropic
-    empty = {"items": [], "drivers": [], "cues": []}
+    empty = {"items": [], "drivers": [], "cues": [], "results": []}
     if client is None and not os.getenv("ANTHROPIC_API_KEY"):
         return {**empty, "note": "no ANTHROPIC_API_KEY"}
     client = client or anthropic.Anthropic()
     tool = {"type": "web_search_20260209", "name": "web_search", "max_uses": max_searches,
             "allowed_domains": OFFICIAL + OUTLETS, "user_location": {"type": "approximate", "country": "IN"}}
+    ask = RESULTS_ASK.format(names=", ".join(results_for)) if results_for else ""
     messages = [{"role": "user", "content": SEARCH_PROMPT.format(day=day.strftime("%A %d %B %Y"),
-                                                                 context=context or "(not available)")}]
+                                                                 context=context or "(not available)", results=ask)}]
     retrieved, notes = set(), []
     try:
         for _ in range(4):                                                 # resume if the server pauses a long turn
@@ -295,9 +337,11 @@ def web_news(day: date, client=None, max_searches: int = 10, context: str = "") 
                if _sourced(d, retrieved) and safe_text(d.text, names)][:4]
     cues = [{"what": c.what, "value": c.value, "source_urls": _sourced(c, retrieved)} for c in out.cues
             if _sourced(c, retrieved) and safe_text(f"{c.what} {c.value}", [])][:5]
-    note = (f"{len(kept)} of {len(out.items)} news items, {len(drivers)} of {len(out.drivers)} reasons and "
-            f"{len(cues)} of {len(out.cues)} global cues passed the trust and SEBI checks")
-    return {"items": kept, "drivers": drivers, "cues": cues, "note": note}
+    results = trusted_results(out.results, retrieved)[:4]
+    note = (f"{len(kept)} of {len(out.items)} news items, {len(drivers)} of {len(out.drivers)} reasons, "
+            f"{len(cues)} of {len(out.cues)} global cues and {len(results)} of {len(out.results)} results passed the "
+            "trust and SEBI checks")
+    return {"items": kept, "drivers": drivers, "cues": cues, "results": results, "note": note}
 
 
 # ---------------------------------------------------------------- the day
@@ -324,8 +368,9 @@ def compile_day(today: date, store: Path, holidays=(), client=None, get=None, se
     filing = content.news_item(today, store)
     context = "; ".join(f"{BROAD.get(k, SECTORS.get(k, k))} {ix[k]['pct']:+.2f}%" for k in list(BROAD) + list(SECTORS)
                         if k in ix and ix[k]["pct"] is not None)
-    web = web_news(today, client, context=context) if search else {"items": [], "drivers": [], "cues": [],
-                                                                   "note": "search off"}
+    due = results_due(get, today, store)
+    web = web_news(today, client, context=context, results_for=[c for _, c in due]) if search else {
+        "items": [], "drivers": [], "cues": [], "results": [], "note": "search off"}
     news, note = web["items"], web["note"]
     # history: Nifty 50, plus the sector each news item concerns, plus the day's biggest sector move
     hist = [history_line("NIFTY 50", nifty.get("pct"))]
@@ -339,7 +384,8 @@ def compile_day(today: date, store: Path, holidays=(), client=None, get=None, se
            "breadth": (n500.get("adv"), n500.get("dec")), "vix": (vix.get("close"), vix.get("pct")),
            "fii": snap["fii"], "dii": snap["dii"], "pe": nifty.get("pe"), "dy": nifty.get("dy"),
            "nifty_30d": nifty.get("pct30"), "nifty_1y": nifty.get("pct365"),
-           "news": news, "news_note": note, "drivers": web["drivers"], "cues": web["cues"], "filing": filing, "history": [h for h in hist if h],
+           "news": news, "news_note": note, "drivers": web["drivers"], "cues": web["cues"], "filing": filing,
+           "results": web.get("results", []), "results_due_today": [c for _, c in due], "history": [h for h in hist if h],
            "next_session": next_session(today, holidays).isoformat(),
            "calendar": calendar(get, next_session(today, holidays), store)}
     charts = []
@@ -405,6 +451,15 @@ def brief(day: dict) -> str:
         lines += ["", "GLOBAL CUES"]
         for c in day["cues"]:
             lines.append(f"• {c['what']}: {c['value']} ({_domain(c['source_urls'][0])})")
+    if day.get("results"):
+        lines += ["", "RESULTS TODAY (business numbers; never the share)"]
+        for r in day["results"]:
+            lines.append(f"• {r['company']} - {r['quarter']} [{'company filing' if r['official'] else '2+ outlets'}]")
+            lines += [f"  - {p['text']}" for p in r["points"]]
+            lines.append("  " + ", ".join(sorted({_domain(u) for p in r["points"] for u in p["source_urls"]})))
+    elif day.get("results_due_today"):
+        lines += ["", "RESULTS TODAY", "• Due today: " + ", ".join(day["results_due_today"])
+                  + " (numbers not found on trusted sources yet)"]
     lines += ["", "NEWS (trusted sources only)"]
     if not day["news"] and not day["filing"]:
         lines.append(f"• Nothing passed the trust rule today ({day['news_note']}).")
