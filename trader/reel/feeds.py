@@ -28,13 +28,13 @@ GNEWS = "https://news.google.com/rss/search?q={q}&hl=en-IN&gl=IN&ceid=IN:en"
 OUTLET_FEEDS = {
     "Economic Times - Markets": "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
     "Economic Times - Top": "https://economictimes.indiatimes.com/rssfeedstopstories.cms",
-    "Moneycontrol - Latest": "https://www.moneycontrol.com/rss/latestnews.xml",
-    "Moneycontrol - Markets": "https://www.moneycontrol.com/rss/marketreports.xml",
+    # Moneycontrol and Financial Express refuse their own RSS to servers (first live run): via Google News instead
+    "Moneycontrol (via Google News)": GNEWS.format(q=quote_plus("site:moneycontrol.com markets when:1d")),
     "Mint - Markets": "https://www.livemint.com/rss/markets",
     "Mint - Companies": "https://www.livemint.com/rss/companies",
     "Business Standard - Markets": "https://www.business-standard.com/rss/markets-106.rss",
     "BusinessLine - Markets": "https://www.thehindubusinessline.com/markets/feeder/default.rss",
-    "Financial Express - Market": "https://www.financialexpress.com/market/feed/",
+    "Financial Express (via Google News)": GNEWS.format(q=quote_plus("site:financialexpress.com market when:1d")),
     "NDTV Profit": "https://feeds.feedburner.com/ndtvprofit-latest",
     "CNBC-TV18 - Market": "https://www.cnbctv18.com/commonfeeds/v1/cne/rss/market.xml",
     # Google News searches: every outlet, Reuters included
