@@ -15,6 +15,7 @@
   python -m trader.run insights       # evening: swing ideas with reasons on Telegram (information only, never traded)
   python -m trader.run fo-paper       # evening: F&O practice run on paper (Addenda 20/20a; never an order)
   python -m trader.run reel           # morning: the daily education Reel -> Telegram for you to review and post
+                                      # (--slot evening: the second Reel, if reel.evening is on)
   python -m trader.run voices         # voice samples on Telegram to choose the Reel's voice (--voice ID: 4 ways)
   python -m trader.run report         # P&L per strategy vs the Nifty ETF, charges, tax estimate -> Telegram
   python -m trader.run reconcile      # live positions vs real INDstocks holdings (--fix to correct the record)
@@ -592,8 +593,11 @@ def cmd_reel(cfg, args) -> int:
     from .reel.job import run
     n = Notifier(dry_run=args.dry_run)
     rc = cfg.get("reel") or {}
+    if args.slot == "evening" and not rc.get("evening"):
+        print("reel (evening): off (trader.yaml reel: {evening: true} turns on the second daily Reel)")
+        return 0
     print(run(n.send, n.send_video, handle=str(rc.get("handle", "")), voice_model=rc.get("voice_model"),
-              voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman")), force=args.force))
+              voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman")), force=args.force, slot=args.slot))
     return 0
 
 
@@ -873,6 +877,7 @@ def main(argv=None) -> int:
     ap.add_argument("--no-update", action="store_true", help="retest: use the data already downloaded")
     ap.add_argument("--forget", action="store_true",
                     help="cancel: mark earlier-day orders INDstocks no longer knows as cancelled (check the app first)")
+    ap.add_argument("--slot", default="morning", choices=["morning", "evening"], help="reel: which daily Reel")
     ap.add_argument("--voice", default="", help="voices: compare models and spellings for this voice ID")
     ap.add_argument("--model", default="", help="voices: ElevenLabs model for the first test")
     ap.add_argument("--stock", default="", help="split / keep: the stock")

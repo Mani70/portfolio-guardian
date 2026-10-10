@@ -1,4 +1,5 @@
-"""The Reel's script: written by Claude in Hinglish from the day's facts, then checked by rules before it is voiced.
+"""The Reel's script: one topic as 8-12 short beats, written by Claude in Hinglish from the day's facts, then checked
+by rules before it is voiced.
 
 The model gets only the facts we pass in and a strict education-only brief. Whatever it writes is checked again here
 (no buy/sell/target language, no prediction, no price for a named company); a script that fails twice is replaced by a
@@ -17,40 +18,49 @@ from pydantic import BaseModel, Field
 
 log = logging.getLogger("trader.reel.script")
 MODEL = "claude-opus-5-5"
-DISCLAIMER = ("Yeh sirf education hai, investment advice nahi. Main SEBI-registered advisor nahi hoon. Koi bhi "
-              "decision lene se pehle khud research karein.")
-DISCLAIMER_SPOKEN = ("यह सिर्फ़ education है, investment advice नहीं। मैं SEBI-registered advisor नहीं हूँ। कोई भी "
-                     "decision लेने से पहले ख़ुद research करें।")
+DISCLAIMER = "Yeh sirf education hai, investment advice nahi."          # said; the full text is on screen and in the caption
+DISCLAIMER_SPOKEN = "यह सिर्फ़ education है, investment advice नहीं।"
+DISCLAIMER_SCREEN = "Education only. Not investment advice. Not a SEBI-registered adviser."
 CAPTION_DISCLAIMER = ("Education only - not investment advice. Not a SEBI-registered investment adviser or research "
                       "analyst. Past results do not guarantee future returns.")
+SERIES = {"myth": "MYTH vs SACH", "news": "NEWS SAMJHO", "story": "MARKET KI KAHANI"}
 
-SYSTEM = """You write the script of a 60-90 second Instagram Reel in Hinglish (Hindi and English mixed, written in Roman letters, the way young Indians talk) for an audience with NO investment background.
+SYSTEM = """You write one 45-60 second Instagram Reel in Hinglish - Hindi-first, with the English words young Indians use (share, fund, profit, Nifty), written in Roman letters - for people with NO investment background, mostly from Hindi-speaking India.
 
 The Reel is EDUCATION ONLY. Indian law (SEBI) does not allow unregistered people to give investment advice or make performance claims. So you must never:
 - tell anyone to buy, sell, hold, enter or exit anything, or give a target price or stop-loss for any share;
 - predict what any share, index or the market will do;
 - mention the current or recent price of any named company;
 - promise or suggest returns ("paisa double", "guaranteed", "multibagger", "pakka profit");
-- present research results as a recommendation.
-You may explain what a piece of official news means, what a concept means, and what our own historical tests found (always as "humare test mein..." - a past result, not a promise).
+- present research results as a recommendation;
+- use any number, date or name that is not in the facts given to you.
 
-Each scene also has "spoken": the SAME narration, word for word in meaning, written for the voice: Hindi words in Devanagari, English words (fund, Nifty, P/E ratio, buyback, percent) kept in English letters, every number exactly as in the narration (as digits). Nothing added or left out. Example - narration: "Index fund matlab ek saath 50 companies ka chhota hissa." spoken: "Index fund मतलब एक साथ 50 companies का छोटा हिस्सा।"
+Make it ENTERTAINING - this is what keeps people watching and makes them come back:
+- Beat 1 is the hook: a bold question, a shocking number or a "sab yeh sochte hain..." line, in under 12 words. No greeting, no "aaj hum baat karenge".
+- Tell it like a story with tension: set up the belief or the situation, build curiosity ("ab twist suniye..."), then the reveal. Short punchy sentences, rhetorical questions, desi analogies (chai, cricket, shaadi, EMI, Bollywood-style drama - but no film dialogues or song lyrics), a little humour. Never insult anyone, never fear-monger.
+- Explain every technical term in the same sentence, in plain words.
+- 8 to 12 beats. Each beat is ONE or TWO short sentences (6-20 words) - the picture changes every beat. 120-160 words in total.
+- Each beat's on_screen text is at most 6 words: the punchline, keyword or number of that beat (not a copy of the narration).
+- The last beat (kind "question") asks viewers ONE easy question to answer in the comments (e.g. "Aapne kabhi ... kiya hai? Comment mein batao"), then teases tomorrow's topic in one line if one is given.
+- Do not add a disclaimer or a "follow karo" line; those are added after your beats.
 
-Style: a strong hook in the first line (a surprising fact or question), short sentences, warm and energetic, simple words, explain every technical term in the same sentence, no jargon left unexplained. 160-220 words of narration in total. Each scene's on-screen text is at most 7 words. Do not add a disclaimer or a call to follow; those are added after your scenes."""
+Each beat also has "spoken": the SAME words for the voice - Hindi words in Devanagari, English words (fund, Nifty, P/E ratio, buyback, percent) kept in English letters, every number exactly as in the narration, as digits. Nothing added or left out. Example - narration: "Index fund matlab ek saath 50 companies ka chhota hissa." spoken: "Index fund मतलब एक साथ 50 companies का छोटा हिस्सा।"
+"""
 
 
 class Scene(BaseModel):
-    kind: Literal["hook", "lesson", "research", "news", "takeaway"]
-    narration: str = Field(description="What the voice says, Hinglish in Roman letters (shown as captions)")
+    kind: Literal["hook", "myth", "truth", "proof", "explain", "news", "history", "story", "twist", "takeaway",
+                  "question"]
+    narration: str = Field(description="What the voice says: 1-2 short sentences, Hinglish in Roman letters (shown as captions)")
     spoken: str = Field(default="", description="The same narration for the voice: Hindi words in Devanagari, English "
                                                 "words in English letters, the same numbers as digits")
-    on_screen: str = Field(description="Big text on screen, at most 7 words")
+    on_screen: str = Field(description="Big text on screen for this beat, at most 6 words")
 
 
 class ReelScript(BaseModel):
     title: str
-    scenes: List[Scene]
-    caption: str = Field(description="Instagram caption, 2-4 short lines, Hinglish, no advice")
+    scenes: List[Scene] = Field(description="The beats, in order")
+    caption: str = Field(description="Instagram caption, 2-4 short lines, Hinglish, no advice, ending with the comment question")
     hashtags: List[str]
 
 
@@ -82,8 +92,12 @@ def check(script: ReelScript, companies: List[str]) -> List[str]:
     """Problems that make a script unsafe to publish (empty list = fine)."""
     issues = []
     words = sum(len(s.narration.split()) for s in script.scenes)
-    if not 120 <= words <= 260:
-        issues.append(f"narration is {words} words (needs 160-220)")
+    if not 95 <= words <= 190:
+        issues.append(f"narration is {words} words (needs 120-160)")
+    if not 6 <= len(script.scenes) <= 14:
+        issues.append(f"{len(script.scenes)} beats (needs 8-12)")
+    if script.scenes and script.scenes[-1].kind != "question":
+        issues.append("the last beat must be the comment question")
     names = [c.lower() for c in companies if c]
     for i, s in enumerate(script.scenes, 1):
         text = f"{s.narration} {s.on_screen}"
@@ -139,16 +153,27 @@ def _spoken_issues(s: Scene, named: bool) -> List[str]:
 
 
 def _brief(facts: dict) -> str:
-    parts = [f"Today's date: {facts['date']}.",
-             f"LESSON (explain simply): {facts['lesson'][0]} - {facts['lesson'][1]}",
-             f"RESEARCH FACT from our own pre-registered tests (say it as a past result): {facts['research']}"]
-    n = facts.get("news")
-    if n:
-        parts.append("NEWS (official NSE announcement; explain what it means for a beginner, do not mention any price, "
-                     f"do not predict): {n['symbol']} - {n['subject']}. {n['text']}")
+    f = facts["format"]
+    parts = [f"Today's date: {facts['date']}. Series: {SERIES[f]}, episode {facts.get('episode', 1)}."]
+    if f == "myth":
+        parts += [f"MYTH (a popular belief - set it up, then bust it): {facts['myth']}",
+                  f"WHAT OUR OWN PRE-REGISTERED TESTS FOUND (the reveal; say it as a past result): {facts['truth']}",
+                  f"CONCEPT TO EXPLAIN SIMPLY: {facts['lesson'][0]} - {facts['lesson'][1]}",
+                  "Beat kinds to use: hook, myth, twist, truth, proof, explain, takeaway, question."]
+    elif f == "news":
+        n = facts["news"]
+        parts += ["NEWS (official NSE announcement; explain what it means for a beginner, do not mention any price, do "
+                  f"not predict): {n['symbol']} - {n['subject']}. {n['text']}"]
         if n.get("history"):
             parts.append(f"HISTORY for this type of news (may be quoted as an average, not a prediction): {n['history']}")
-    parts.append("Scene order: hook, lesson, research, " + ("news, " if n else "") + "takeaway.")
+        parts.append("Beat kinds to use: hook, news, explain, history, takeaway, question.")
+    else:
+        t, story, lesson = facts["story"]
+        parts += [f"TRUE STORY from Indian market history - {t}: {story}", f"ITS LESSON: {lesson}",
+                  "Tell it like a thriller: the rise, the secret, the fall, the lesson. Use only these facts.",
+                  "Beat kinds to use: hook, story, twist, takeaway, question."]
+    if facts.get("next"):
+        parts.append(f"TOMORROW'S TOPIC (tease it in the last beat): {facts['next']}")
     return "\n".join(parts)
 
 
@@ -188,15 +213,26 @@ def write(facts: dict, client=None) -> tuple[ReelScript, str]:
 
 def template(facts: dict) -> ReelScript:
     """A plain, always-safe script from the same facts."""
-    t, point = facts["lesson"]
-    scenes = [Scene(kind="hook", narration="Kya aap jaante ho? " + facts["research"], on_screen="Humare test ka sach"),
-              Scene(kind="lesson", narration=f"Aaj ka lesson: {t}. {point}", on_screen=t[:40])]
-    n = facts.get("news")
-    if n:
-        scenes.append(Scene(kind="news", narration=(f"Aaj NSE par {n['symbol']} ne announce kiya: {n['subject']}. "
-                                                    + (n.get("history") or "")), on_screen=f"{n['symbol']}: news"))
-    scenes.append(Scene(kind="takeaway", narration="Yaad rakhiye: rules pe chaliye, costs ginna mat bhooliye, aur "
-                                                   "kisi bhi tip pe aankh band karke bharosa mat kijiye.",
-                        on_screen="Rules > tips"))
-    return ReelScript(title=t, scenes=scenes, caption=f"{t} | aaj ka market lesson",
-                      hashtags=["stockmarketindia", "investing", "nifty50", "financialeducation", "hinglish"])
+    f = facts["format"]
+    nxt = f" Kal: {facts['next']}" if facts.get("next") else ""
+    if f == "myth":
+        t, point = facts["lesson"]
+        beats = [Scene(kind="hook", narration=facts["myth"], on_screen=facts["myth"][:40]),
+                 Scene(kind="truth", narration="Humare test ka sach: " + facts["truth"], on_screen="Humare test ka sach"),
+                 Scene(kind="explain", narration=f"{t}: {point}", on_screen=t[:40])]
+    elif f == "news":
+        n = facts["news"]
+        beats = [Scene(kind="news", narration=f"Aaj NSE par {n['symbol']} ne announce kiya: {n['subject']}.",
+                       on_screen=f"{n['symbol']}: news")]
+        if n.get("history"):
+            beats.append(Scene(kind="history", narration=n["history"], on_screen="Itihaas kya kehta hai"))
+    else:
+        t, story, lesson = facts["story"]
+        beats = [Scene(kind="story", narration=story, on_screen=t[:40]),
+                 Scene(kind="takeaway", narration="Seekh: " + lesson, on_screen="Seekh")]
+    beats.append(Scene(kind="question", narration="Aapka kya experience hai? Comment mein batao." + nxt,
+                       on_screen="Comment mein batao"))
+    title = SERIES[f]
+    return ReelScript(title=title, scenes=beats, caption=f"{title} | aaj ka market lesson\nAapka kya experience hai? "
+                      "Comment mein batao.", hashtags=["stockmarketindia", "investing", "nifty50", "financialeducation",
+                                                      "hinglish"])
