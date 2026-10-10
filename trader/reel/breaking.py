@@ -119,13 +119,46 @@ def feed_new(feeds: dict, seen: set, fetch=None, max_age_hours: int = 12) -> Lis
     return out
 
 
+def published(c: dict) -> Optional[datetime]:
+    """When the source published it, in Indian time (naive), or None if unknown."""
+    t = c.get("time") or ""
+    try:
+        return datetime.strptime(t, "%d-%b-%Y %H:%M:%S")                    # NSE (already IST)
+    except ValueError:
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
+        from zoneinfo import ZoneInfo
+        d = parsedate_to_datetime(t)                                        # RSS
+        return d.astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None) if d.tzinfo else d
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def fresh(c: dict, now: datetime, max_age_min: int = 120) -> bool:
+    """Still worth a Reel: published within max_age_min, or overnight (23:00-07:00) and it is not yet 09:30 - the
+    audience was asleep, so it is news to them in the morning."""
+    pub = published(c)
+    if pub is None:
+        return True
+    if now - pub <= timedelta(minutes=max_age_min):
+        return True
+    night = pub.hour >= 23 or pub.hour < 7
+    morning = pub.replace(hour=9, minute=30, second=0) + (timedelta(days=1) if pub.hour >= 23 else timedelta())
+    return night and now <= morning and now - pub <= timedelta(hours=12)
+
+
+INSTANT = {"results", "order won", "acquisition", "rating upgrade", "rating downgrade", "auditor resigned",
+           "MD/CEO/CFO resigned", "default / insolvency", "buyback", "bonus issue", "stock split", "fund raising"}
+
+
 def priority(c: dict) -> tuple:
     order = {"results": 0, "macro": 1, "check": 3}
     return (order.get(c["kind"], 2), -c["value"])
 
 
 # ---------------------------------------------------------------- reading the document
-def read(c: dict, client=None) -> Optional[dict]:
+def read(c: dict, client=None, fast: bool = True) -> Optional[dict]:
     """Claude reads the official document (web fetch) and returns the facts, or None if it could not."""
     import anthropic
     if client is None and not os.getenv("ANTHROPIC_API_KEY"):
@@ -138,9 +171,9 @@ def read(c: dict, client=None) -> Optional[dict]:
     notes, fetched = [], False
     try:
         for _ in range(3):
-            resp = client.beta.messages.create(
-                model=market.MODEL, max_tokens=16000, messages=messages, tools=[tool],
-                output_config={"effort": "low"}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+            resp = market.create(client, fast, model=market.MODEL, max_tokens=16000, messages=messages, tools=[tool],
+                                 output_config={"effort": "low"}, betas=["server-side-fallback-2026-07-01"],
+                                 fallbacks="default")
             for b in resp.content:
                 if b.type == "web_fetch_tool_result" and getattr(b.content, "type", "") == "web_fetch_result":
                     fetched = True
@@ -190,12 +223,15 @@ def facts(c: dict, got: dict, episode: int) -> dict:
 
 # ---------------------------------------------------------------- the watch
 def watch(state: dict, now: datetime, get, size: dict, feeds: dict, max_per_day: int = 3, gap_min: int = 30,
-          client=None, fetch=None, learn_only: bool = False) -> tuple[Optional[dict], List[str], dict]:
-    """(facts for one Reel or None, alert lines, new state). learn_only: just remember what is already out."""
+          client=None, fetch=None, learn_only: bool = False, on_pick=None, on_read=None,
+          max_age_min: int = 120) -> tuple[Optional[dict], List[str], dict]:
+    """(facts for one Reel or None, alert lines, new state). learn_only: just remember what is already out.
+    on_pick(c): called the moment an inherently material item is picked (the instant Story card); on_read(c, got):
+    when Claude has read it and judged it material (the facts card)."""
     today = now.date().isoformat()
     seen = set(state.get("seen", []))
     made = [t for t in state.get("made", []) if t.startswith(today)]
-    cands = nse_new(get, seen, now.date(), size) + feed_new(feeds, seen, fetch)
+    cands = nse_new(get, seen, now.date(), size) + (feed_new(feeds, seen, fetch) if feeds else [])
     alerts, chosen, reads = [], None, 0
     for c in sorted(cands, key=priority):
         seen.add(c["id"])
@@ -203,11 +239,16 @@ def watch(state: dict, now: datetime, get, size: dict, feeds: dict, max_per_day:
             continue
         room = len(made) < max_per_day and (not made or now - datetime.fromisoformat(made[-1]) >=
                                             timedelta(minutes=gap_min))
-        if chosen is None and room and reads < 3:                         # at most 3 documents read per run
+        if chosen is None and room and reads < 3 and fresh(c, now, max_age_min):   # at most 3 reads a run
             reads += 1
+            if on_pick and c["kind"] in INSTANT:
+                on_pick(c)
             got = read(c, client)
             if got and got["material"]:
+                if on_read:
+                    on_read(c, got)
                 chosen = facts(c, got, state.get("episode", 0) + 1)
+                chosen["published"] = c.get("time") or ""
                 made.append(now.isoformat(timespec="minutes"))
                 alerts.append(f"🚨 {c['source']} - {got['headline']}\n{c['url']}")
                 continue
@@ -221,8 +262,9 @@ def watch(state: dict, now: datetime, get, size: dict, feeds: dict, max_per_day:
 
 def run(notify, send_video, make, now: Optional[datetime] = None, out_dir: Optional[Path] = None, client=None,
         get=None, size: Optional[dict] = None, feeds: Optional[dict] = None, max_per_day: int = 3,
-        fetch=None) -> str:
+        fetch=None, send_photo=None, max_age_min: int = 120) -> str:
     now = now or datetime.now()
+    started = datetime.now()
     out_dir = out_dir or market.ROOT / "cache" / "reel"
     p = out_dir / "breaking.json"
     state = json.loads(p.read_text()) if p.exists() else {}
@@ -232,8 +274,27 @@ def run(notify, send_video, make, now: Optional[datetime] = None, out_dir: Optio
     if size is None:
         size = market._traded_value(market.ROOT / "cache" / "insights")
     first_run = not state
-    chosen, alerts, state = watch(state, now, get, size, FEEDS if feeds is None else feeds, max_per_day,
-                                  client=client, fetch=fetch, learn_only=first_run)
+    feeds = FEEDS if feeds is None else feeds
+    if not first_run and now.minute % 5:                                   # NSE every minute, feeds every 5 minutes
+        feeds = {}
+    from .render import story_card
+
+    def card(c, headline, lines, label):
+        if send_photo:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            f = story_card(headline, lines, c["source"], out_dir / f"story_{now:%H%M%S}_{label[:5]}.png", label)
+            send_photo(f, "📲 Instagram STORY card - post it now; the Reel follows in a few minutes.\n" + c["url"])
+
+    def on_pick(c):
+        what = "results" if c["kind"] == "results" else c["kind"]
+        card(c, f"{c['company'].replace(' Limited', '').replace(' Ltd', '')}: {what}",
+             ["Official NSE filing, just now", "Details aur matlab - Reel mein, kuch minute mein"], "ABHI ABHI")
+
+    def on_read(c, got):
+        card(c, got["headline"], got["points"][:3], "KYA HUA")
+
+    chosen, alerts, state = watch(state, now, get, size, feeds, max_per_day, client=client, fetch=fetch,
+                                  learn_only=first_run, on_pick=on_pick, on_read=on_read, max_age_min=max_age_min)
     out_dir.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(state))
     if first_run:                                                          # the first run only learns what is old
@@ -242,8 +303,16 @@ def run(notify, send_video, make, now: Optional[datetime] = None, out_dir: Optio
         for a in alerts[:5]:
             notify(a)
         return f"breaking: nothing made ({len(alerts)} alerts)"
-    r = make(chosen)
-    ok = send_video(r["video"], f"🚨 BREAKING SAMJHO - post now ({now:%H:%M})")
+    try:
+        r = make(chosen)
+    except Exception as e:                                                 # noqa: BLE001 - report once, not every minute
+        log.exception("breaking Reel failed")
+        notify(f"⚠️ Breaking Reel could not be made ({type(e).__name__}); the Story card and source link above are "
+               "still good to post.")
+        return f"breaking: Reel failed ({type(e).__name__})"
+    took = (datetime.now() - started).seconds
+    ok = send_video(r["video"], f"🚨 BREAKING SAMJHO - post now (source published {chosen.get('published') or '?'}; "
+                                f"Reel ready in {took // 60}m{took % 60:02d}s)")
     notify(f"📝 Caption (copy-paste):\n\n{r['caption']}")
     notify("Breaking Reel: watch it once, open the source link, then post. "
            f"Script: {r['script_source']}. Voice: {r['voice']}." + ("" if ok else f" Video on the server: {r['video']}"))

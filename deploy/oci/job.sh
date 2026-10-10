@@ -31,7 +31,7 @@ case "$job" in
   reel-evening) limit=30m; cmd=(-m trader.run reel --slot evening) ;;
   reel-market) limit=40m; cmd=(-m trader.run reel --slot market) ;;
   reel-company) limit=40m; cmd=(-m trader.run reel --slot company) ;;
-  reel-breaking) limit=15m; cmd=(-m trader.run reel --slot breaking) ;;
+  reel-breaking) limit=12m; cmd=(-m trader.run reel --slot breaking) ;;
   *) echo "usage: $0 intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|insights|fo-paper|reel|reel-market|reel-evening|reel-company|reel-breaking|reboot" >&2; exit 2 ;;
 esac
 

@@ -209,3 +209,19 @@ def test_voice_audition_reports_a_refused_list_instead_of_crashing(tmp_path, mon
     said = []
     assert audition.run(said.append, lambda *a, **k: True, key="k", out=tmp_path) == "voices: no voices to test"
     assert "HTTP 401" in said[0] and "Voices: Read" in said[0]
+
+
+def test_every_format_has_a_working_fallback_template():
+    base = {"date": "2026-10-12", "episode": 1, "next": "kal"}
+    cases = [{"format": "myth", "myth": "M?", "truth": "T", "lesson": ("L", "point")},
+             {"format": "story", "story": ("T", "story", "lesson")},
+             {"format": "news", "news": {"symbol": "TCS", "subject": "Buyback", "history": "h"}},
+             {"format": "news", "macro": {"headline": "h", "facts": "f", "why_it_matters": "w", "sector": "IT",
+                                         "official": True, "source_urls": []}},
+             {"format": "news", "results": {"company": "TCS", "quarter": "Q2", "official": True,
+                                            "points": [{"text": "Revenue up 5%", "source_urls": []}]}},
+             {"format": "market", "market_lines": ["Nifty 50 closed 22,520"]},
+             {"format": "company", "company_lines": ["Paints."]}]
+    for c in cases:
+        sc = S.template({**base, **c})
+        assert sc.scenes[-1].kind == "question", c["format"]

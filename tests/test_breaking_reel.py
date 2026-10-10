@@ -80,3 +80,34 @@ def test_run_starts_quietly_then_makes_and_sends_a_breaking_reel(tmp_path, monke
     finally:
         ANN.pop()
     assert msg.startswith("breaking: sent") and made[0]["breaking"] and "Caption" in said[0]
+
+
+def test_freshness_two_hours_by_day_and_overnight_news_until_the_morning():
+    c = lambda t: {"time": t}                                                       # noqa: E731
+    assert breaking.fresh(c("12-Oct-2026 14:30:00"), datetime(2026, 10, 12, 16, 0))          # 90 minutes old
+    assert not breaking.fresh(c("12-Oct-2026 13:00:00"), datetime(2026, 10, 12, 16, 0))      # 3 hours old
+    assert breaking.fresh(c("12-Oct-2026 02:10:00"), datetime(2026, 10, 12, 8, 45))          # overnight, before 09:30
+    assert not breaking.fresh(c("12-Oct-2026 02:10:00"), datetime(2026, 10, 12, 10, 0))
+    assert breaking.fresh(c("11-Oct-2026 23:40:00"), datetime(2026, 10, 12, 9, 0))           # late-night news
+    rss = {"time": "Mon, 12 Oct 2026 10:00:00 GMT"}                                          # 15:30 in India
+    assert breaking.published(rss) == datetime(2026, 10, 12, 15, 30)
+
+
+def test_story_cards_go_out_before_the_reel_and_stale_news_gets_no_reel(tmp_path, monkeypatch):
+    monkeypatch.setattr(breaking, "read", lambda c, client=None: {
+        "material": True, "headline": "HCL Tech Q2: profit up 7%", "sector": "IT", "companies": ["HCL Technologies"],
+        "points": ["Revenue ₹30,000 crore, up 5%", "Net profit ₹4,000 crore, up 7%"], "why_it_matters": "w",
+        "url": c["url"], "source": c["source"]})
+    (tmp_path / "breaking.json").write_text('{"seen": [], "made": [], "episode": 0}')
+    photos, order = [], []
+    msg = breaking.run(lambda t: order.append("text"), lambda p, c: order.append("video") or True,
+                       lambda f: order.append("make") or {"video": "v", "caption": "c", "script_source": "claude",
+                                                          "voice": "elevenlabs"},
+                       now=NOW, out_dir=tmp_path, get=get, size=SIZE, feeds={},
+                       send_photo=lambda p, c: photos.append(p) or order.append("photo"))
+    assert msg.startswith("breaking: sent") and order[:4] == ["photo", "photo", "make", "video"]
+    assert all(p.exists() for p in photos)                                    # ABHI ABHI card, then KYA HUA card
+    (tmp_path / "breaking.json").write_text('{"seen": [], "made": [], "episode": 0}')
+    late = breaking.run(lambda t: None, lambda p, c: True, lambda f: 1 / 0, now=NOW.replace(hour=19), out_dir=tmp_path,
+                        get=get, size=SIZE, feeds={}, send_photo=lambda p, c: True)
+    assert late.startswith("breaking: nothing made")                          # 3 hours old: alert only

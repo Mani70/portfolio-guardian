@@ -605,8 +605,8 @@ def cmd_reel(cfg, args) -> int:
                                      voice_model=bc.get("voice_model", "eleven_flash_v2_5"),
                                      voice_id=rc.get("voice_id"), speak=str(rc.get("speak", "roman")),
                                      facts_override=f)
-        print(breaking.run(n.send, n.send_video, mk, feeds=bc.get("feeds"),
-                           max_per_day=int(bc.get("max_per_day", 3))))
+        print(breaking.run(n.send, n.send_video, mk, feeds=bc.get("feeds"), send_photo=n.send_photo,
+                           max_per_day=int(bc.get("max_per_day", 3)), max_age_min=int(bc.get("max_age_min", 120))))
         return 0
     if args.slot == "company" and not rc.get("company", True):
         print("reel (company): off (trader.yaml reel: {company: false})")

@@ -157,7 +157,7 @@ def tighten(audio: Path, out: Path) -> Path:
 
 
 def build(scenes: List[Tuple[str, str, str, Path]], out: Path, work: Path, handle: str = "",
-          top_line: str = "") -> Path:
+          top_line: str = "", fast: bool = False) -> Path:
     """scenes: (kind, on_screen, narration, audio file). One frame per spoken word, timed to that beat's voice."""
     work.mkdir(parents=True, exist_ok=True)
     clips = [tighten(a, work / f"t{i:02d}.wav") for i, (_, _, _, a) in enumerate(scenes)]
@@ -169,7 +169,7 @@ def build(scenes: List[Tuple[str, str, str, Path]], out: Path, work: Path, handl
         for j, t in enumerate(word_times(words, s)):
             p = work / f"f{k:04d}.png"
             frame(kind, on_screen, words, j, (done + sum(word_times(words, s)[:j])) / total,
-                  top_line if k == 0 or kind == "hook" else "", handle).save(p)
+                  top_line if k == 0 or kind == "hook" else "", handle).save(p, compress_level=1)
             listing.append(f"file '{p.name}'\nduration {t:.3f}")
             k += 1
         done += s
@@ -181,7 +181,24 @@ def build(scenes: List[Tuple[str, str, str, Path]], out: Path, work: Path, handl
                     "loudnorm=I=-14:TP=-1.5:LRA=11", "-ac", "1", "-ar", "44100", "audio.m4a"],
                    cwd=work, capture_output=True, check=True)
     subprocess.run([ff, "-y", "-f", "concat", "-safe", "0", "-i", "frames.txt", "-i", "audio.m4a",
-                    "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+                    "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast" if fast else "medium", "-crf", "23",
                     "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart", str(out.resolve())],
                    cwd=work, capture_output=True, check=True)
+    return out
+
+
+def story_card(headline: str, lines: List[str], source: str, out: Path, label: str = "ABHI ABHI") -> Path:
+    """A 1080x1920 Instagram Story card: label, headline, up to 4 lines, the official source - ready in a second."""
+    img = _gradient((90, 10, 20), (20, 20, 40)).copy()
+    d = ImageDraw.Draw(img)
+    lf = font(44)
+    lw = d.textlength(label, font=lf)
+    d.rounded_rectangle([(W - lw) / 2 - 34, 230, (W + lw) / 2 + 34, 320], radius=44, fill=YELLOW)
+    d.text(((W - lw) / 2, 248), label, font=lf, fill=(20, 20, 20))
+    y = _centered(d, textwrap.wrap(headline.upper(), 18)[:5], font(86), 420, WHITE, gap=20)
+    bf = font(46, bold=False)
+    for line in lines[:4]:
+        y = _centered(d, textwrap.wrap("• " + line, 36)[:3], bf, y + 40, (235, 235, 235), gap=10)
+    _centered(d, ["Source: " + source, FOOTER], font(32, bold=False), 1700, (220, 220, 220), gap=12)
+    img.save(out)
     return out

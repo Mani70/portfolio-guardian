@@ -43,6 +43,23 @@ class Notifier:
         except requests.RequestException as e:
             log.error("Telegram send failed: %s", e)
 
+    def send_photo(self, path, caption: str = "") -> bool:
+        """An image (e.g. a breaking-news Story card) to the Telegram chat. True if Telegram accepted it."""
+        print(f"[photo] {path}\n{caption}")
+        if self.dry_run or not (self.tg_token and self.tg_chat):
+            return False
+        try:
+            with open(path, "rb") as fh:
+                r = requests.post(f"https://api.telegram.org/bot{self.tg_token}/sendPhoto",
+                                  data={"chat_id": self.tg_chat, "caption": caption[:1000]}, files={"photo": fh},
+                                  timeout=60)
+            if r.status_code != 200:
+                log.error("Telegram photo failed: HTTP %s %s", r.status_code, r.text[:200])
+            return r.status_code == 200
+        except (OSError, requests.RequestException) as e:
+            log.error("Telegram photo failed: %s", e)
+            return False
+
     def send_audio(self, path, caption: str = "", title: str = "") -> bool:
         """An audio clip to the Telegram chat: a local file, or an https URL Telegram fetches itself."""
         print(f"[audio] {path}\n{caption}")

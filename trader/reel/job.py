@@ -139,14 +139,18 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
     items = [(s.kind, s.on_screen, s.narration, (s.spoken if deva else "") or s.narration) for s in sc.scenes]
     items.append(("disclaimer", S.DISCLAIMER_SCREEN, S.DISCLAIMER, S.DISCLAIMER_SPOKEN if deva else S.DISCLAIMER))
     said = [numbers.speakable(x[3], hindi_words=deva) for x in items]   # numbers as words: the voice never guesses
-    scenes, voices = [], set()
-    for i, (kind, on_screen, narration, _) in enumerate(items):
-        audio, vsrc = voice.speak(said[i], work / f"a{i:02d}.mp3", voice=voice_id, model=voice_model,
-                                  prev=said[i - 1] if i else None, nxt=said[i + 1] if i + 1 < len(said) else None)
-        voices.add(vsrc)
-        scenes.append((kind, on_screen, narration, audio))
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(i):                                                            # every beat is voiced at the same time
+        return voice.speak(said[i], work / f"a{i:02d}.mp3", voice=voice_id, model=voice_model,
+                           prev=said[i - 1] if i else None, nxt=said[i + 1] if i + 1 < len(said) else None)
+    with ThreadPoolExecutor(4) as ex:
+        spoken = list(ex.map(one, range(len(items))))
+    scenes = [(kind, on_screen, narration, spoken[i][0]) for i, (kind, on_screen, narration, _) in enumerate(items)]
+    voices = {v for _, v in spoken}
     top = f"{facts.get('series') or S.SERIES[facts['format']]}  •  EP {facts['episode']}"
-    video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}_{slot}.mp4", work, handle, top)
+    video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}_{slot}.mp4", work, handle, top,
+                         fast=bool(facts.get("breaking")))
     tags = " ".join("#" + h.lstrip("#").replace(" ", "") for h in sc.hashtags[:8])
     caption = f"{top}\n\n{sc.caption}\n\n{S.CAPTION_DISCLAIMER}\n\n{tags}"
     if facts.get("news"):

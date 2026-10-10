@@ -290,6 +290,19 @@ def trusted_results(results: List[ResultItem], retrieved: set) -> List[dict]:
     return out
 
 
+def create(client, fast: bool = False, **kw):
+    """client.beta.messages.create, in fast mode when asked (breaking news; up to ~2.5x faster output), falling back
+    to the standard speed if fast mode is busy or unavailable."""
+    import anthropic
+    betas = list(kw.pop("betas", []))
+    if fast:
+        try:
+            return client.beta.messages.create(speed="fast", betas=betas + ["fast-mode-2026-02-01"], **kw)
+        except (anthropic.RateLimitError, anthropic.BadRequestError) as e:
+            log.warning("fast mode unavailable (%s); standard speed", type(e).__name__)
+    return client.beta.messages.create(betas=betas, **kw)
+
+
 def web_news(day: date, client=None, max_searches: int = 10, context: str = "", results_for: List[str] = ()) -> dict:
     """{items, drivers, cues, note}. Claude searches only the trusted sites; the trust rule (items: one official
     source or two outlets; drivers and cues: one trusted page) and the SEBI sentence check are applied in code."""

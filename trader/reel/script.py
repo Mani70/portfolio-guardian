@@ -270,10 +270,16 @@ def write(facts: dict, client=None) -> tuple[ReelScript, str]:
     messages = [{"role": "user", "content": _brief(facts)}]
     for attempt in range(2):
         try:
-            resp = client.beta.messages.parse(
-                model=MODEL, max_tokens=16000, system=SYSTEM, messages=messages, output_format=ReelScript,
-                output_config={"effort": "medium"},
-                betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+            kw = dict(model=MODEL, max_tokens=16000, system=SYSTEM, messages=messages, output_format=ReelScript,
+                      output_config={"effort": "low" if facts.get("breaking") else "medium"}, fallbacks="default")
+            resp = None
+            if facts.get("breaking"):                                      # breaking news: fast mode if available
+                try:
+                    resp = client.beta.messages.parse(speed="fast", betas=["server-side-fallback-2026-07-01",
+                                                                            "fast-mode-2026-02-01"], **kw)
+                except (anthropic.RateLimitError, anthropic.BadRequestError) as e:
+                    log.warning("fast mode unavailable (%s)", type(e).__name__)
+            resp = resp or client.beta.messages.parse(betas=["server-side-fallback-2026-07-01"], **kw)
         except anthropic.APIConnectionError as e:
             log.warning("Claude unreachable: %s", e)
             return template(facts), "template (Claude unreachable)"
@@ -311,24 +317,6 @@ def template(facts: dict) -> ReelScript:
         beats = [Scene(kind="hook", narration=facts["myth"], on_screen=facts["myth"][:40]),
                  Scene(kind="truth", narration="Humare test ka sach: " + facts["truth"], on_screen="Humare test ka sach"),
                  Scene(kind="explain", narration=f"{t}: {point}", on_screen=t[:40])]
-    elif f == "news" and facts.get("results"):
-        r = facts["results"]
-        parts += [f"RESULTS SAMJHO: {r['company']} announced its results for {r['quarter']} today "
-                  f"({'company filing' if r['official'] else 'two established outlets'}). Explain them like a story for a "
-                  "beginner: what revenue and profit mean, what changed from a year ago and why (as the company said). "
-                  "Business numbers only - NEVER the share price, a share move, a target or whether to buy/sell; no "
-                  "forecast of your own (what management said may be quoted as theirs).",
-                  "RESULT FACTS (use only these):"] + [f"- {p['text']}" for p in r["points"]]
-        parts.append("Beat kinds to use: hook, news, explain, history, takeaway, question.")
-    elif f == "news" and facts.get("macro"):
-        m = facts["macro"]
-        parts += [f"NEWS ({'official source' if m['official'] else 'two established outlets'}; explain what it means "
-                  f"for a beginner, no forecast, no stock call, never a company's share price or move): {m['headline']}. "
-                  f"{m['facts']}", f"WHY IT MATTERS (general facts): {m['why_it_matters']}"]
-        if m.get("sector_today") is not None:
-            parts.append(f"The {m['sector']} index moved {m['sector_today']:+.2f}% today (an index, may be said).")
-        parts += [f"HISTORY (quote only as an average, not a prediction): {h}" for h in facts.get("history", [])]
-        parts.append("Beat kinds to use: hook, news, explain, history, takeaway, question.")
     elif f == "news" and facts.get("results"):
         r = facts["results"]
         beats = [Scene(kind="news", narration=f"{r['company']} ke {r['quarter']} ke results aaye.", on_screen="Results")]
