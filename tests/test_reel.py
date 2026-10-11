@@ -284,3 +284,20 @@ def test_old_videos_and_cards_are_cleaned_up(tmp_path):
     os.utime(old, (past, past))
     os.utime(card, (past, past))
     assert job.cleanup(tmp_path, date(2026, 10, 11)) == 2 and new.exists() and not old.exists()
+
+
+def test_starter_pack_restarts_numbering_and_pauses_the_daily_slots(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    (tmp_path / "state.json").write_text(json.dumps({"episodes": {"myth": 3, "story": 1}, "polls": [1]}))
+    said, videos = [], []
+    msg = job.starter(said.append, lambda p, c: videos.append(c) or True, today=date(2026, 10, 11), out_dir=tmp_path,
+                      topics=["pathshala:0", "myth:13"])
+    assert msg == "reel (starter): sent 2 of 2" and videos[0].startswith("🚀 STARTER 1/2 - PAISA KI PATHSHALA")
+    st = json.loads((tmp_path / "state.json").read_text())
+    assert {k: v for k, v in st["episodes"].items() if not k.startswith("_")} == {"pathshala": 1, "myth": 1}
+    assert st["polls"] == [1] and json.loads((tmp_path / "state.before-starter.json").read_text())["episodes"]["myth"] == 3
+    assert "PAISA KI PATHSHALA  •  EP 1" in said[1] and "MYTH vs SACH  •  EP 1" in said[3]
+    assert "Kal:" not in said[1]                                             # no teaser: posted over several days
+    assert job.run(said.append, lambda p, c: True, today=date(2026, 10, 12), out_dir=tmp_path) == \
+        "reel (morning): paused until 2026-10-13 (the starter pack is being posted)"

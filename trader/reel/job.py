@@ -100,10 +100,14 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
     f = {"date": today.isoformat()}
     if topic:
         kind, _, n = topic.partition(":")
-        items = {"myth": content.MYTHS, "story": content.STORIES}.get(kind)
+        items = {"myth": content.MYTHS, "story": content.STORIES, "pathshala": content.PATHSHALA}.get(kind)
         if items is None or not n.isdigit() or int(n) >= len(items):
-            raise ValueError(f"topic must be myth:0-{len(content.MYTHS) - 1} or story:0-{len(content.STORIES) - 1}")
-        if kind == "myth":
+            raise ValueError(f"topic must be myth:0-{len(content.MYTHS) - 1}, story:0-{len(content.STORIES) - 1} "
+                             f"or pathshala:0-{len(content.PATHSHALA) - 1}")
+        if kind == "pathshala":
+            item = items[int(n)]
+            f.update(format="pathshala", lesson=item, day_no=int(n) + 1, total=len(content.PATHSHALA))
+        elif kind == "myth":
             myth, truth, lesson = items[int(n)]
             f.update(format="myth", myth=myth, truth=truth, lesson=(lesson, content.LESSON[lesson]),
                      next=content.pick(content.MYTHS, today + timedelta(days=1))[0])
@@ -281,6 +285,63 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
             "cast": facts["cast"]}
 
 
+# The starter pack: 9 Reels that fill the profile grid when the account restarts, in POSTING order - the last one ends
+# up top-left. Loss-framed myths and true stories led the first Reels' views; PATHSHALA Din 1 is the "start here".
+STARTER = ["myth:17", "story:9", "pathshala:0", "myth:8", "story:1", "myth:14", "myth:0", "myth:13", "story:0"]
+
+
+def starter(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, handle: str = "",
+            voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman", send_photo=None,
+            topics: Optional[List[str]] = None, pause_days: int = 2) -> str:
+    """Restart the series: episode numbers from 1 (the old state is kept as state.before-starter.json), then the
+    starter Reels one by one, each sent to Telegram with its number in the posting order. No 'kal...' teasers (they
+    are posted over a few days), drawn cast on. The morning and evening Reels pause for `pause_days` days so the
+    owner posts these instead."""
+    today = today or date.today()
+    topics = topics or STARTER
+    out_dir.mkdir(parents=True, exist_ok=True)
+    state_p = out_dir / "state.json"
+    st = json.loads(state_p.read_text()) if state_p.exists() else {}
+    (out_dir / "state.before-starter.json").write_text(json.dumps(st))
+    st["episodes"] = {}
+    st["pause_until"] = (today + timedelta(days=pause_days)).isoformat()
+    state_p.write_text(json.dumps(st))
+    notify(f"🚀 STARTER PACK: {len(topics)} Reels coming, one every few minutes. Archive the old Reels first "
+           "(Reel → ⋯ → Archive). Post these IN THIS ORDER (1 first, the last one ends up top-left), 3-4 a day "
+           f"with 2+ hours between them. Morning and night Reels pause until {st['pause_until']}; MARKET AAJ "
+           "continues.")
+    done = 0
+    for k, topic in enumerate(topics, 1):
+        st = json.loads(state_p.read_text())                              # fresh: other jobs may have written
+        episodes = st.get("episodes", {})
+        try:
+            facts = facts_for(today, "morning", episodes, None, topic, None, out_dir)
+            facts.pop("next", None)
+            r = make(today, out_dir, client, None, handle, voice_model, voice_id, speak, f"starter{k}", episodes,
+                     topic, facts_override=facts, characters="on")
+        except Exception as e:                                             # noqa: BLE001 - one bad Reel, keep going
+            log.warning("starter %s: %s", topic, e)
+            notify(f"Starter {k}/{len(topics)} ({topic}) failed: {type(e).__name__}. The others continue.")
+            continue
+        send_video(r["video"], f"🚀 STARTER {k}/{len(topics)} - {r['series']} - post #{k}")
+        if send_photo:
+            send_photo(r["cover"], f"🖼️ Cover for STARTER {k}/{len(topics)}")
+        notify(f"📝 STARTER {k}/{len(topics)} caption:\n\n{r['caption']}")
+        notify(r["checklist"] + f"\nScript: {r['script_source']}. Voice: {r['voice']}.")
+        st = json.loads(state_p.read_text())
+        episodes = st.get("episodes", {})
+        episodes[r["format"]] = episodes.get(r["format"], 0) + 1
+        episodes["_hooks"] = (list(episodes.get("_hooks", [])) + [r["script"].scenes[0].narration[:120]])[-8:]
+        if r.get("topic_title"):
+            episodes["_used"] = (episodes.get("_used", []) + [r["topic_title"]])[-80:]
+        st["episodes"] = episodes
+        state_p.write_text(json.dumps(st))
+        done += 1
+    notify(f"✅ Starter pack ready: {done} of {len(topics)} Reels. After posting, pin 3: PAISA KI PATHSHALA Din 1 "
+           "(start here), the Harshad Mehta story and the F&O myth.")
+    return f"reel (starter): sent {done} of {len(topics)}"
+
+
 def cleanup(out_dir: Path, today: date, video_days: int = 14, image_days: int = 7) -> int:
     """Old Reel videos (14 days) and cards / slides / covers (7 days) are deleted, so the disk never fills up."""
     import time
@@ -307,6 +368,8 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
     sent = st.get("sent_" + slot, st.get("sent") if slot == "morning" else None)
     if sent == today.isoformat() and not force:
         return f"reel ({slot}): already sent today"
+    if slot in ("morning", "evening") and not topic and not force and st.get("pause_until", "") >= today.isoformat():
+        return f"reel ({slot}): paused until {st['pause_until']} (the starter pack is being posted)"
     episodes = st.get("episodes", {})
     if "_used" not in episodes and episodes.get("myth", 0) >= 2:           # the 3 starter Reels (--topic myth:0,
         episodes["_used"] = [content.MYTHS[0][0], content.MYTHS[13][0], content.STORIES[0][0]]   # story:0, myth:13)

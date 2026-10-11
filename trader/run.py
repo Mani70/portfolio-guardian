@@ -617,6 +617,12 @@ def cmd_reel(cfg, args) -> int:
                            max_per_day=int(bc.get("max_per_day", 2)), max_age_min=int(bc.get("max_age_min", 120)),
                            sweep_hours=int(bc.get("sweep_hours", 2))))
         return 0
+    if args.starter:
+        from .reel import job as reel_job
+        print(reel_job.starter(n.send, n.send_video, handle=str(rc.get("handle", "")),
+                               voice_model=rc.get("voice_model"), voice_id=rc.get("voice_id"),
+                               speak=str(rc.get("speak", "roman")), send_photo=n.send_photo))
+        return 0
     if args.slot == "company" and not rc.get("company", True):
         print("reel (company): off (trader.yaml reel: {company: false})")
         return 0
@@ -909,7 +915,10 @@ def main(argv=None) -> int:
     ap.add_argument("--no-update", action="store_true", help="retest: use the data already downloaded")
     ap.add_argument("--forget", action="store_true",
                     help="cancel: mark earlier-day orders INDstocks no longer knows as cancelled (check the app first)")
-    ap.add_argument("--topic", default="", help="reel: myth:N, story:N (trader/reel/content.py) or company:SYMBOL")
+    ap.add_argument("--topic", default="", help="reel: myth:N, story:N, pathshala:N (trader/reel/content.py) or "
+                                                "company:SYMBOL")
+    ap.add_argument("--starter", action="store_true",
+                    help="reel: restart the series with the 9-Reel starter pack (episode numbers from 1)")
     ap.add_argument("--slot", default="morning", choices=["morning", "market", "evening", "company", "breaking", "feeds"],
                     help="reel: which Reel (company = the weekly COMPANY KI KUNDLI case study)")
     ap.add_argument("--voice", default="", help="voices: compare models and spellings for this voice ID")

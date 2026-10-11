@@ -498,7 +498,10 @@ drawn, clearly fictional characters - SACHI the narrator (opens and closes, her 
 (first salary), Rahul (tempted by F&O), Sharma ji (Papa, FDs), Sunita (Mummy, household budget), Raju (kirana shop) -
 in round badges with six expressions, never as a winner or next to a return figure. No photo-real AI people or AI
 presenters (labelling rules, deepfake look). Each Reel's Telegram note says whether characters were on, so Insights
-can compare the two groups after a few weeks.
+can compare the two groups after a few weeks. **Starter pack** (`trader.run reel --starter`): restarts the episode numbers from 1
+(old state kept in cache/reel/state.before-starter.json) and sends 9 Reels in posting order - loss-framed myths, true
+stories and PATHSHALA Din 1, drawn cast on, no "kal..." teasers; the morning and night Reels pause for 2 days while
+they are posted (MARKET AAJ continues).
 **Choosing the voice:** `trader.run voices` sends Telegram clips of the same Hinglish lines read by your own voices and
 the most used Hindi voices of the Voice Library (about 3k credits); `trader.run voices --voice <ID>` reads them 4 ways
 for one voice - eleven_multilingual_v2 / eleven_v3, Hindi in Roman letters / in Devanagari - each clip's caption has the
