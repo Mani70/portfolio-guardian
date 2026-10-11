@@ -15,7 +15,7 @@ import logging
 import shutil
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from . import company, content, engage, market, night, numbers, render, script as S, voice
 
@@ -167,6 +167,43 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
     return f
 
 
+def _crore(x: float) -> str:
+    return f"{'+' if x >= 0 else '-'}₹{abs(x):,.0f} cr"
+
+
+def visuals(kinds: List[str], facts: dict, day: Optional[dict]) -> List[dict]:
+    """Charts for the market Reel's beats, from the day's own data (index level only): the first 'market' beat gets
+    the Nifty's last 60 sessions as a line, a second one the broad indices; 'sector' the 3 best and 3 worst sectors;
+    'flows' the FII and DII money. Other beats get their icon."""
+    out = [{} for _ in kinds]
+    if facts.get("format") != "market" or not day:
+        return out
+    seen = set()
+    for i, k in enumerate(kinds):
+        v = None
+        if k == "market" and "market" not in seen and day.get("spark"):
+            sp = day["spark"]
+            v = {"type": "line", "values": sp["values"], "from": sp["from"], "to": sp["to"],
+                 "last": f"Nifty {sp['values'][-1]:,.0f}"}
+        elif k == "market" and day.get("broad"):
+            v = {"type": "bars", "items": [(n, x["pct"], f"{x['pct']:+.2f}%") for n, x in day["broad"].items()
+                                           if x.get("pct") is not None]}
+        elif k == "sector" and "sector" not in seen and day.get("sectors"):
+            s = day["sectors"]
+            best = s[::-1][:3]
+            worst = [x for x in s[:3] if x not in best][::-1]
+            v = {"type": "bars", "items": [(n, p, f"{p:+.2f}%") for n, p in best + worst]}
+        elif k == "flows" and "flows" not in seen and day.get("fii") is not None:
+            items = [("Videshi (FII)", day["fii"], _crore(day["fii"]))]
+            if day.get("dii") is not None:
+                items.append(("Desi funds (DII)", day["dii"], _crore(day["dii"])))
+            v = {"type": "bars", "items": items}
+        if v and v.get("items", v.get("values")):
+            out[i]["visual"] = v
+            seen.add(k)
+    return out
+
+
 def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = None, handle: str = "",
          voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
          slot: str = "morning", episodes: Optional[dict] = None, topic: str = "", day: Optional[dict] = None,
@@ -190,7 +227,11 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
                            prev=said[i - 1] if i else None, nxt=said[i + 1] if i + 1 < len(said) else None)
     with ThreadPoolExecutor(4) as ex:
         spoken = list(ex.map(one, range(len(items))))
-    scenes = [(kind, on_screen, narration, spoken[i][0]) for i, (kind, on_screen, narration, _) in enumerate(items)]
+    extras = visuals([s.kind for s in sc.scenes], facts, day) + [{}]
+    for x, s in zip(extras, sc.scenes):
+        x.setdefault("icon", s.icon)
+    scenes = [(kind, on_screen, narration, spoken[i][0], extras[i])
+              for i, (kind, on_screen, narration, _) in enumerate(items)]
     voices = {v for _, v in spoken}
     top = f"{facts.get('series') or S.SERIES[facts['format']]}  •  EP {facts['episode']}"
     video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}_{slot}.mp4", work, handle, top)
@@ -208,7 +249,8 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
     if facts.get("macro"):
         caption += "\n\nSources: " + ", ".join(sorted({market._domain(u) for u in facts["macro"]["source_urls"]}))
     series = facts.get("series") or S.SERIES[facts["format"]]
-    cover = render.cover(series, facts["episode"], sc.scenes[0].on_screen or sc.title, work / "cover.png", handle)
+    cover = render.cover(series, facts["episode"], sc.scenes[0].on_screen or sc.title, work / "cover.png", handle,
+                         extras[0].get("icon") or render.KIND_EMOJI["hook"])
     return {"video": video, "caption": caption, "script": sc, "script_source": source, "format": facts["format"],
             "voice": ", ".join(sorted(voices)), "news": facts.get("news"), "question": sc.scenes[-1].narration,
             "cover": cover, "series": series,

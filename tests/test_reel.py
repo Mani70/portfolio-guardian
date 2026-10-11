@@ -119,6 +119,28 @@ def test_word_captions_follow_the_voice_and_frames_have_a_progress_bar():
     assert img.size == (1080, 1920) and img.getpixel((200, 5)) == render.YELLOW and img.getpixel((900, 5)) == (0, 0, 0)
 
 
+def test_beats_get_icons_counters_and_charts_inside_the_safe_zone():
+    assert "📈" in render.emoji_list() and render.has_emoji("⚖️") and not render.has_emoji("🦄")
+    c = render._counter("₹1,23,456 crore")
+    assert c == ("₹", 123456.0, 0, True, "crore") and render._count_text(c, 1.0) == "₹1,23,456 crore"
+    assert render._count_text(render._counter("93%"), 0.0) == "0%" and render._counter("Nifty 50") is None
+    still = render.frame("truth", "93%", ["93", "percent"], 0, 0.4, icon="😱")
+    line = render.frame("market", "Nifty 3 mahine", ["Nifty"], 0, 0.5, at=3.0,
+                        visual={"type": "line", "values": list(range(100, 160)), "from": "1 Aug", "to": "9 Oct",
+                                "last": "Nifty 159"})
+    assert still.size == line.size == (1080, 1920)
+    px = line.crop((render.SAFE_LEFT, 600, render.SAFE_RIGHT, 1100)).getcolors(1_000_000)
+    assert any(abs(r - render.GREEN[0]) < 6 and abs(g - render.GREEN[1]) < 6 for _, (r, g, b) in px)  # the up-line
+    day = {"spark": {"values": [1.0, 2.0, 3.0], "from": "1 Aug", "to": "9 Oct"},
+           "broad": {"Nifty 50": {"close": 3.0, "pct": 0.5}},
+           "sectors": [("Metal", -1.2), ("Auto", -0.4), ("Bank", 0.9), ("IT", 1.8)], "fii": -1234.5, "dii": 2000.0}
+    v = job.visuals(["hook", "market", "sector", "flows", "market", "question"], {"format": "market"}, day)
+    assert v[0] == {} and v[1]["visual"]["type"] == "line" and v[4]["visual"]["type"] == "bars"
+    assert [x[0] for x in v[2]["visual"]["items"]] == ["IT", "Bank", "Auto", "Metal"]
+    assert v[3]["visual"]["items"][0][2] == "-₹1,234 cr" and job.visuals(["market"], {"format": "myth"}, day) == [{}]
+    assert "{icons}" not in S.SYSTEM and "🧠" in S.SYSTEM
+
+
 def test_full_reel_without_keys_builds_a_video_and_says_why(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)

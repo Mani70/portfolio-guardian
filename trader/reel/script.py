@@ -41,12 +41,16 @@ Make it ENTERTAINING - this is what keeps people watching and makes them come ba
 - Tell it like a story with tension: set up the belief or the situation, build curiosity ("ab twist suniye..."), then the reveal. Short punchy sentences, rhetorical questions, desi analogies (chai, cricket, shaadi, EMI, Bollywood-style drama - but no film dialogues or song lyrics), a little humour. Never insult anyone, never fear-monger.
 - Explain every technical term in the same sentence, in plain words.
 - 8 to 12 beats. Each beat is ONE or TWO short sentences (6-20 words) - the picture changes every beat. 120-160 words in total.
-- Each beat's on_screen text is at most 6 words: the punchline, keyword or number of that beat (not a copy of the narration).
+- Each beat's on_screen text is at most 6 words: the punchline, keyword or number of that beat (not a copy of the narration). Put *stars* around the ONE word that matters most (it is shown in colour). A beat whose on_screen is only a number ("93%", "₹546 crore") shows that number counting up - use it for the most striking number.
+- Each beat has an "icon": ONE emoji from this list that pictures the beat (vary them; no icon twice in a row): {icons}
 - The last beat (kind "question") asks viewers ONE easy question to answer in the comments (e.g. "Aapne kabhi ... kiya hai? Comment mein batao"), then teases tomorrow's topic in one line if one is given.
 - Do not add a disclaimer or a "follow karo" line; those are added after your beats.
 
 Each beat also has "spoken": the SAME words for the voice - Hindi words in Devanagari, English words (fund, Nifty, P/E ratio, buyback, percent) kept in English letters, every number exactly as in the narration, as digits. Nothing added or left out. Example - narration: "Index fund matlab ek saath 50 companies ka chhota hissa." spoken: "Index fund मतलब एक साथ 50 companies का छोटा हिस्सा।"
 """
+
+from .render import emoji_list  # noqa: E402 - the icons we have pictures for
+SYSTEM = SYSTEM.replace("{icons}", " ".join(emoji_list()))
 
 
 class Scene(BaseModel):
@@ -56,6 +60,7 @@ class Scene(BaseModel):
     spoken: str = Field(default="", description="The same narration for the voice: Hindi words in Devanagari, English "
                                                 "words in English letters, the same numbers as digits")
     on_screen: str = Field(description="Big text on screen for this beat, at most 6 words")
+    icon: str = Field(default="", description="One emoji from the list in the instructions that pictures this beat")
 
 
 class ReelScript(BaseModel):

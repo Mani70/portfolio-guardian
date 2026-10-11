@@ -462,8 +462,10 @@ search retrieved, and every sentence passes a SEBI check in code (no forecast, i
 with a % or a price). It costs about $0.15-0.40 a day of Anthropic credit (up to 10 searches + reading).
 
 Built for watch time (research notes: `trader/reel/RESEARCH.md`): a hook in the first beat, 8-12 beats with a new
-picture every beat, word-by-word captions with the current word highlighted, a progress bar, big numbers, trimmed
-pauses, loudness -14 LUFS, a comment question and tomorrow's teaser at the end, episode numbers. Numbers are spelled out
+picture every beat, and nothing standing still (30 fps): a drifting background, a big icon per beat, headline words that
+pop in, numbers that count up, the Nifty / sectors / FII-DII as animated charts on MARKET AAJ, soft whoosh and pop
+effects, word-by-word captions with the current word highlighted, a progress bar, all inside Instagram's safe zone,
+trimmed pauses, loudness -14 LUFS, a comment question and tomorrow's teaser at the end, episode numbers. Numbers are spelled out
 for the voice (2536 -> "दो हज़ार पाँच सौ छत्तीस"; "Nifty 50" stays "Nifty fifty").
 
 Education only (SEBI's Jan 2025 circular: unregistered people may not give investment advice or make performance
