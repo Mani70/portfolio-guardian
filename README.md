@@ -485,7 +485,20 @@ reel:
   speak: devanagari                    # the voice reads Hindi words in Devanagari (captions stay Roman); default roman
   evening: true                        # the 21:30 Reel (the day's top news explained, or a market-history story)
   market: true                         # the weekday MARKET AAJ wrap + daily brief (default on)
+  characters: ab                       # the drawn cast: ab (on in even weeks, off in odd - a test), on, off
 ```
+**Growth research** (`reports/Short form finance audience growth.md`): why people stop, watch, send and follow, what
+top creators do, how Instagram grows a new account, and which pictures of people are safe. What the Reels do with it:
+45-60 s (word limits set from the real voice speed, long pauses trimmed, a Reel over its limit sped up at most 12%);
+a hook that puts the viewer's money or a belief they hold at stake, and a "lekin twist..." re-hook mid-way; a spoken
+"Papa ko bhejo jo..." send line in the last beat; a small "Source: ..." tag on every number; no politicians or parties;
+no prediction game in the comments (the guess stays in the Story poll); a search phrase as the caption's first line and
+at most 5 hashtags; the last hooks are passed on so openings do not repeat. **The cast** (`trader/reel/cast.py`): six
+drawn, clearly fictional characters - SACHI the narrator (opens and closes, her mouth moves with the voice), Priya
+(first salary), Rahul (tempted by F&O), Sharma ji (Papa, FDs), Sunita (Mummy, household budget), Raju (kirana shop) -
+in round badges with six expressions, never as a winner or next to a return figure. No photo-real AI people or AI
+presenters (labelling rules, deepfake look). Each Reel's Telegram note says whether characters were on, so Insights
+can compare the two groups after a few weeks.
 **Choosing the voice:** `trader.run voices` sends Telegram clips of the same Hinglish lines read by your own voices and
 the most used Hindi voices of the Voice Library (about 3k credits); `trader.run voices --voice <ID>` reads them 4 ways
 for one voice - eleven_multilingual_v2 / eleven_v3, Hindi in Roman letters / in Devanagari - each clip's caption has the

@@ -141,6 +141,22 @@ def test_beats_get_icons_counters_and_charts_inside_the_safe_zone():
     assert "{icons}" not in S.SYSTEM and "🧠" in S.SYSTEM
 
 
+def test_drawn_cast_takes_turns_by_week_and_shows_on_story_beats(monkeypatch):
+    from trader.reel import cast
+    assert job.cast_week(date(2026, 10, 12)) and not job.cast_week(date(2026, 10, 19))      # ISO weeks 42 / 43
+    assert job.cast_week(date(2026, 10, 19), "on") and not job.cast_week(date(2026, 10, 12), "off")
+    assert cast.pick("sharma") == "Sharma ji" and cast.pick("Sachi") == "Sachi" and cast.pick("Elon") is None
+    assert cast.badge("Priya", "worried", size=200).size == (200, 200)
+    assert cast.badge("Sachi", talking=True) is not cast.badge("Sachi")                  # the mouth moves
+    img = render.frame("story", "Pehli *salary*", ["Priya", "ki"], 0, 0.3, icon="💵", character="Priya",
+                       expression="proud")
+    assert img.size == (1080, 1920) and img.getpixel((render.CX, 625)) != img.getpixel((render.CX, 1700))
+    assert "Sachi" in S._brief({"date": "2026-10-12", "format": "pathshala", "episode": 2, "cast": True,
+                                "lesson": ("FD", "FD safe hai"), "day_no": 2, "total": 40})
+    assert "OUR CAST" not in S._brief({"date": "2026-10-19", "format": "pathshala", "episode": 2, "cast": False,
+                                       "lesson": ("FD", "FD safe hai"), "day_no": 2, "total": 40})
+
+
 def test_full_reel_without_keys_builds_a_video_and_says_why(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
@@ -155,7 +171,7 @@ def test_full_reel_without_keys_builds_a_video_and_says_why(tmp_path, monkeypatc
     assert job.run(said.append, lambda p, c: True, today=date(2026, 10, 12), out_dir=tmp_path, store=tmp_path / "none",
                    slot="evening").startswith("reel (evening): sent story")
     st = json.loads((tmp_path / "state.json").read_text())
-    assert {k: v for k, v in st["episodes"].items() if k != "_used"} == {"myth": 1, "story": 1}
+    assert {k: v for k, v in st["episodes"].items() if not k.startswith("_")} == {"myth": 1, "story": 1}
     assert len(st["episodes"]["_used"]) == 2 and st["sent_evening"] == "2026-10-12"
 
 

@@ -13,11 +13,11 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
-from . import company, content, engage, market, night, numbers, render, script as S, voice
+from . import cast, company, content, engage, market, night, numbers, render, script as S, voice
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "cache" / "reel"
@@ -167,6 +167,17 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
     return f
 
 
+def cast_week(d: date, setting: str = "ab") -> bool:
+    """Are the drawn characters in this Reel? 'on', 'off', or 'ab': on in even ISO weeks, off in odd ones - an A/B
+    test the owner reads in Instagram Insights after a few weeks (reports/Short form finance audience growth.md)."""
+    s = (setting or "ab").lower()
+    return s in ("on", "true", "yes") or (s == "ab" and d.isocalendar()[1] % 2 == 0)
+
+
+# the longest each format may run (seconds, with the disclaimer); a longer voice is sped up a little to fit
+MAX_SECS = {"company": 68, "market": 72, "night": 105}
+
+
 def _crore(x: float) -> str:
     return f"{'+' if x >= 0 else '-'}₹{abs(x):,.0f} cr"
 
@@ -200,6 +211,8 @@ def visuals(kinds: List[str], facts: dict, day: Optional[dict]) -> List[dict]:
             v = {"type": "bars", "items": items}
         if v and v.get("items", v.get("values")):
             out[i]["visual"] = v
+            out[i]["source"] = f"NSE data, {datetime.fromisoformat(day['date']):%d %b %Y}" if day.get("date") \
+                else "NSE data"
             seen.add(k)
     return out
 
@@ -207,8 +220,10 @@ def visuals(kinds: List[str], facts: dict, day: Optional[dict]) -> List[dict]:
 def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = None, handle: str = "",
          voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
          slot: str = "morning", episodes: Optional[dict] = None, topic: str = "", day: Optional[dict] = None,
-         facts_override: Optional[dict] = None) -> dict:
+         facts_override: Optional[dict] = None, characters: str = "ab") -> dict:
     facts = facts_override or facts_for(today, slot, episodes or {}, store, topic, day, out_dir)
+    facts.setdefault("recent_hooks", list((episodes or {}).get("_hooks", []))[-6:])
+    facts["cast"] = cast_week(today, characters)
     sc, source = S.write(facts, client)
     if facts.get("breaking"):
         slot = f"breaking{facts['episode']}"
@@ -230,12 +245,18 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
     extras = visuals([s.kind for s in sc.scenes], facts, day) + [{}]
     for x, s in zip(extras, sc.scenes):
         x.setdefault("icon", s.icon)
+        who = cast.pick(s.character) if facts["cast"] else None
+        if who and "visual" not in x:
+            x.update(character=who, expression=s.expression)
+        if s.source:
+            x.setdefault("source", s.source)
     scenes = [(kind, on_screen, narration, spoken[i][0], extras[i])
               for i, (kind, on_screen, narration, _) in enumerate(items)]
     voices = {v for _, v in spoken}
     top = f"{facts.get('series') or S.SERIES[facts['format']]}  •  EP {facts['episode']}"
-    video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}_{slot}.mp4", work, handle, top)
-    tags = " ".join("#" + h.lstrip("#").replace(" ", "") for h in sc.hashtags[:8])
+    video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}_{slot}.mp4", work, handle, top,
+                         max_secs=MAX_SECS.get(facts["format"], 60))
+    tags = " ".join("#" + h.lstrip("#").replace(" ", "") for h in sc.hashtags[:5])
     caption = f"{top}\n\n{sc.caption}\n\n{S.CAPTION_DISCLAIMER}\n\n{tags}"
     if facts.get("news"):
         caption += f"\n\nSource: NSE announcement, {facts['news']['symbol']} ({facts['news']['date']})"
@@ -250,12 +271,14 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
         caption += "\n\nSources: " + ", ".join(sorted({market._domain(u) for u in facts["macro"]["source_urls"]}))
     series = facts.get("series") or S.SERIES[facts["format"]]
     cover = render.cover(series, facts["episode"], sc.scenes[0].on_screen or sc.title, work / "cover.png", handle,
-                         extras[0].get("icon") or render.KIND_EMOJI["hook"])
+                         extras[0].get("icon") or render.KIND_EMOJI["hook"], extras[0].get("character", ""),
+                         extras[0].get("expression", ""))
     return {"video": video, "caption": caption, "script": sc, "script_source": source, "format": facts["format"],
             "voice": ", ".join(sorted(voices)), "news": facts.get("news"), "question": sc.scenes[-1].narration,
             "cover": cover, "series": series,
             "topic_title": facts.get("myth") or (facts.get("lesson") or ("",))[0] if facts["format"] in ("myth", "pathshala")
-            else (facts.get("story") or ("",))[0], "checklist": engage.checklist(series, sc.scenes[-1].narration, cover)}
+            else (facts.get("story") or ("",))[0], "checklist": engage.checklist(series, sc.scenes[-1].narration, cover),
+            "cast": facts["cast"]}
 
 
 def cleanup(out_dir: Path, today: date, video_days: int = 14, image_days: int = 7) -> int:
@@ -277,7 +300,7 @@ def cleanup(out_dir: Path, today: date, video_days: int = 14, image_days: int = 
 def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, store=None,
         handle: str = "", voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
         force: bool = False, slot: str = "morning", topic: str = "", holidays=(), search: bool = True,
-        send_photo=None, send_album=None) -> str:
+        send_photo=None, send_album=None, characters: str = "ab") -> str:
     today = today or date.today()
     state_p = out_dir / "state.json"
     st = json.loads(state_p.read_text()) if state_p.exists() else {}
@@ -311,13 +334,15 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
         market.save(day, out_dir)
         for part in market.parts(market.brief(day)):
             notify(part)
-    r = make(today, out_dir, client, store, handle, voice_model, voice_id, speak, slot, episodes, topic, day)
+    r = make(today, out_dir, client, store, handle, voice_model, voice_id, speak, slot, episodes, topic, day,
+             characters=characters)
     ok = send_video(r["video"], f"🎬 {r['series']} Reel ({today:%a %d %b}) - review before posting")
     if send_photo:
         send_photo(r["cover"], f"🖼️ Cover for this Reel ({r['series']})")
     notes = [f"📝 Instagram caption (copy-paste):\n\n{r['caption']}",
              r["checklist"] + "\nBefore you post: watch it once; open the source link if a company is named.\n"
-             f"Script: {r['script_source']}. Voice: {r['voice']}."]
+             f"Script: {r['script_source']}. Voice: {r['voice']}. Characters: "
+             f"{'ON (test group A)' if r.get('cast') else 'OFF (test group B)'} - note it with this Reel's Insights."]
     if not ok:
         notes.insert(0, f"The video could not be sent on Telegram; it is on the server at {r['video']}")
     for n in notes:
@@ -335,6 +360,7 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
             log.warning("carousel/poll: %s", e)
     out_dir.mkdir(parents=True, exist_ok=True)
     episodes[r["format"]] = episodes.get(r["format"], 0) + 1
+    episodes["_hooks"] = (list(episodes.get("_hooks", [])) + [r["script"].scenes[0].narration[:120]])[-8:]
     if r["format"] in ("myth", "pathshala", "story"):
         title = r.get("topic_title")
         if title:

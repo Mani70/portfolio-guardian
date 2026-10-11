@@ -56,7 +56,7 @@ def carousel(day: dict, out_dir: Path, handle: str = "") -> List[Path]:
         slides.append(("Results aaj", res + ["Business numbers - share ki baat nahi"]))
     if day.get("chart"):
         slides.append(("Chart kya keh raha hai", day["chart"][:4] + ["Chart batata hai kya hua, kya hoga nahi"]))
-    tail = list(day.get("calendar", [])) + ["Poll: kal Nifty UP ya DOWN? Comment karo 👇",
+    tail = list(day.get("calendar", [])) + ["Kal ka anumaan: Story poll mein do 👆",
                                             "🔖 Save karo  •  📤 Dost ko bhejo"]
     slides.append(("Kal kya dekhna hai", tail))
     out = []
@@ -75,7 +75,8 @@ def poll_card(next_session: str, out_dir: Path) -> Path:
 def checklist(series: str, question: str, cover: Path) -> str:
     return ("✅ Posting checklist (2 minutes):\n"
             f"1. Cover: use the image above ({cover.name}) - Edit cover → Add from camera roll\n"
-            f"2. Music: search '{MUSIC.get(series, 'calm instrumental')}', instrumental, volume 10-15%\n"
-            "3. Paste the caption; turn on the AI label\n"
+            f"2. Music: search '{MUSIC.get(series, 'calm instrumental')}', instrumental, volume 10-15% (optional)\n"
+            "3. Paste the caption as sent (max 5 hashtags); turn on the AI info label\n"
             f"4. After posting, comment and pin: \"{question}\"\n"
-            "5. Reply to the first comments for 10 minutes")
+            "5. First hour: reply to every comment and tap the heart. Never name a share - if someone asks "
+            "'kaunsa share lun?', reply: 'Hum tips nahi dete, par seekhne ke liye yeh Reel dekho'")

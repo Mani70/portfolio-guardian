@@ -223,6 +223,9 @@ class Beat:
     head: list = field(default_factory=list)                             # (picture, x, y) of each headline word
     head_size: int = 0
     counter: Optional[tuple] = None                                      # (prefix, value, decimals, commas, suffix)
+    source: str = ""                                                     # shown small: where the number comes from
+    character: str = ""                                                  # a drawn cast member (cast.py), or ""
+    expression: str = "smile"
 
 
 def _accent(kind: str) -> tuple:
@@ -266,10 +269,10 @@ def _layout_headline(b: Beat, top: int, bottom: int) -> None:
     if not words:
         return
     max_w = SAFE_RIGHT - SAFE_LEFT - 30
-    rows_max = 2 if b.icon else 3                                         # under an icon: two lines at most
+    rows_max = 2 if (b.icon or b.character) else 3                       # under a picture: two lines at most
     for size in (118, 104, 92, 80, 70, 62):
         f = font(size, weight="black")
-        lines = _wrap(" ".join(w.strip("*") for w in words), f, max_w)
+        lines = _wrap(" ".join(w.replace("*", "") for w in words), f, max_w)
         if len(lines) <= rows_max and all(f.getlength(ln) <= max_w for ln in lines):
             break
     b.head_size = size
@@ -281,7 +284,7 @@ def _layout_headline(b: Beat, top: int, bottom: int) -> None:
         for w in ln.split():
             src = words[k]
             k += 1
-            hot = src.startswith("*") or src.endswith("*") or bool(re.search(r"\d|₹|%", src))
+            hot = "*" in src or bool(re.search(r"\d|₹|%", src))
             row.append((_text_img(w, f, accent if hot else WHITE, stroke=5), f.getlength(w)))
         rows.append(row)
     lh = int(size * 1.18)
@@ -301,6 +304,8 @@ def _prepare(b: Beat) -> None:
         _layout_headline_small(b)
     elif b.counter:
         pass
+    elif b.character:
+        _layout_headline(b, 840, 1075)
     else:
         _layout_headline(b, 740 if b.icon else 520, 1060)
 
@@ -464,6 +469,8 @@ def _draw(b: Beat, t: float, progress: float, top_line: str = "", handle: str = 
 
     if b.visual:
         (_draw_line if b.visual.get("type") == "line" else _draw_bars)(img, b.visual, tt, 520 + 80 * len(b.head))
+    elif b.character and not b.counter:
+        _draw_character(img, b, t, tt)
     else:
         icon = emoji(b.icon, 280) if b.icon else None
         if icon is not None:
@@ -481,6 +488,9 @@ def _draw(b: Beat, t: float, progress: float, top_line: str = "", handle: str = 
         p = (tt - 0.12 - 0.07 * i) / 0.28
         _paste(img, word, x, y, scale=0.55 + 0.45 * ease_back(p), alpha=min(1.0, p * 2.5))
 
+    if b.source and b.kind != "disclaimer":                              # where the number comes from
+        _paste(img, _pill("Source: " + b.source[:40], font(26, weight="semi"), (0, 0, 0, 110), (235, 235, 235)),
+               CX, 1096, alpha=ease_out((tt - 0.5) / 0.3))
     if b.words:                                                          # spoken words, 3 at a time
         cur = 0
         while cur + 1 < len(b.times) and b.times[cur + 1] <= t:
@@ -488,12 +498,12 @@ def _draw(b: Beat, t: float, progress: float, top_line: str = "", handle: str = 
         start = (cur // 3) * 3
         cap = _caption_img(tuple(b.words[start:start + 3]), cur - start)
         pop = 1 + 0.06 * (1 - ease_out((t - b.times[cur]) / 0.12)) if b.times else 1
-        _paste(img, cap, CX, 1190, scale=pop)
+        _paste(img, cap, CX, 1206, scale=pop)
 
     ff = font(28, weight="semi")
     foot = FOOTER + (f"  •  {handle}" if handle else "")
     d = ImageDraw.Draw(img, "RGBA")
-    d.text((CX - ff.getlength(foot) / 2, 1290), foot, font=ff, fill=(235, 235, 235, 200))
+    d.text((CX - ff.getlength(foot) / 2, 1298), foot, font=ff, fill=(235, 235, 235, 200))
     d.rectangle([0, 0, W, 12], fill=(0, 0, 0, 160))                       # progress bar
     d.rectangle([0, 0, int(W * _clamp(progress)), 12], fill=YELLOW + (255,))
 
@@ -508,12 +518,32 @@ def _draw(b: Beat, t: float, progress: float, top_line: str = "", handle: str = 
     return img.convert("RGB")
 
 
+NARRATOR = "Sachi"
+
+
+def _draw_character(img: Image.Image, b: Beat, t: float, tt: float) -> None:
+    """The cast member in a round badge: pops in, bobs, blinks; the narrator's mouth moves while the voice speaks.
+    The beat's icon sits on the badge's shoulder."""
+    from . import cast
+    p = (tt - 0.05) / 0.4
+    speaking = b.character == NARRATOR and 0.15 < t < b.secs - 0.25 and int(t * 8) % 2 == 0
+    blink = t > 0.6 and (t % 3.3) < 0.12
+    face = cast.badge(b.character, b.expression or "smile", speaking, blink, 380)
+    bob = 8 * math.sin(tt * 2.2) if p >= 1 else 0
+    _paste(img, face, CX, 625 + bob, scale=ease_back(p), alpha=min(1.0, p * 3))
+    icon = emoji(b.icon, 130) if b.icon else None
+    if icon is not None:
+        q = (tt - 0.35) / 0.35
+        _paste(img, icon, CX + 165, 480 + bob, scale=ease_back(q), alpha=min(1.0, max(0.0, q * 3)))
+
+
 def frame(kind: str, on_screen: str, words: Sequence[str] = (), current: int = -1, progress: float = 0.0,
           top_line: str = "", handle: str = "", caption: str = "", icon: str = "", visual: Optional[dict] = None,
-          at: float = 2.0) -> Image.Image:
+          at: float = 2.0, source: str = "", character: str = "", expression: str = "smile") -> Image.Image:
     """One still picture of a beat, `at` seconds in (previews and tests). caption: plain text instead of words."""
     words = list(words) or caption.split()
-    b = Beat(kind, on_screen, words, secs=max(at, 1.0), icon=icon or KIND_EMOJI.get(kind, ""), visual=visual)
+    b = Beat(kind, on_screen, words, secs=max(at, 1.0), icon=icon or KIND_EMOJI.get(kind, ""), visual=visual,
+             source=source, character=character, expression=expression or "smile")
     b.times = [0.0] * len(words)
     if words and current >= 0:
         b.times = [0.0 if i <= current else at + 1 for i in range(len(words))]
@@ -566,7 +596,7 @@ def sfx_track(beats: List[Beat], total: float, out: Path) -> Path:
             continue
         if b.counter:
             add("ding", b.start + 1.02, 0.07)
-        elif b.visual or (b.icon and k):
+        elif b.visual or b.character or (b.icon and k):
             add("pop", b.start + 0.1, 0.09)
     pcm = (np.clip(track, -1, 1) * 32767).astype(np.int16)
     with wave.open(str(out), "wb") as w:
@@ -580,9 +610,10 @@ def sfx_track(beats: List[Beat], total: float, out: Path) -> Path:
 # ---------------------------------------------------------------- the video
 
 def tighten(audio: Path, out: Path) -> Path:
-    """The clip without its silent start and end, plus a short breath, as WAV (keeps the original if it is all
-    silence, e.g. the no-key fallback)."""
-    trim = ("silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.04,areverse,"
+    """The clip without its silent start and end, plus a short breath, and no pause inside longer than about half a
+    second, as WAV (keeps the original if it is all silence, e.g. the no-key fallback)."""
+    trim = ("silenceremove=stop_periods=-1:stop_threshold=-45dB:stop_duration=0.3:stop_silence=0.2,"   # long pauses
+            "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.04,areverse,"            # inside: ~0.5 s
             "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.04,areverse,apad=pad_dur=0.15")
     subprocess.run([ffmpeg(), "-y", "-i", str(audio), "-af", trim, "-ac", "1", "-ar", "44100", str(out)],
                    capture_output=True)
@@ -592,20 +623,40 @@ def tighten(audio: Path, out: Path) -> Path:
     return out
 
 
+def speed_up(clips: List[Path], factor: float) -> List[Path]:
+    """The clips a little faster (pitch kept) - for a Reel that came out longer than its format allows."""
+    out = []
+    for c in clips:
+        f = c.with_name(c.stem + "_fast.wav")
+        subprocess.run([ffmpeg(), "-y", "-i", str(c), "-af", f"atempo={factor:.3f}", str(f)], capture_output=True,
+                       check=True)
+        out.append(f)
+    return out
+
+
+MAX_SPEEDUP = 1.12                                                        # faster than this sounds rushed
+
+
 def build(scenes: Sequence[tuple], out: Path, work: Path, handle: str = "", top_line: str = "",
-          fast: bool = False) -> Path:
+          fast: bool = False, max_secs: Optional[float] = None) -> Path:
     """scenes: (kind, on_screen, narration, audio file[, extras]) - extras: {"icon": emoji, "visual": chart}.
-    30 frames a second, streamed straight into ffmpeg; the voice and the effects are mixed and normalised."""
+    30 frames a second, streamed straight into ffmpeg; the voice and the effects are mixed and normalised. A voice
+    longer than max_secs is sped up (at most 12%) to fit."""
     work.mkdir(parents=True, exist_ok=True)
     clips = [tighten(sc[3], work / f"t{i:02d}.wav") for i, sc in enumerate(scenes)]
     secs = [max(1.0, duration(c)) for c in clips]
+    if max_secs and sum(secs) > max_secs * 1.01:
+        clips = speed_up(clips, min(MAX_SPEEDUP, sum(secs) / max_secs))
+        secs = [max(1.0, duration(c)) for c in clips]
     beats, at = [], 0.0
     for i, (sc, s) in enumerate(zip(scenes, secs)):
         kind, on_screen, narration = sc[0], sc[1], sc[2]
         extra = sc[4] if len(sc) > 4 and sc[4] else {}
         icon = extra.get("icon") or ""
         icon = icon if has_emoji(icon) else KIND_EMOJI.get(kind, "")
-        b = Beat(kind, on_screen, narration.split(), at, s, icon, extra.get("visual"), first=i == 0)
+        b = Beat(kind, on_screen, narration.split(), at, s, icon, extra.get("visual"), first=i == 0,
+                 source=extra.get("source") or "", character=extra.get("character") or "",
+                 expression=extra.get("expression") or "smile")
         wt = word_times(b.words, s)
         b.times = [sum(wt[:j]) for j in range(len(wt))]
         _prepare(b)
@@ -692,12 +743,16 @@ SERIES_COLOURS = {"MYTH vs SACH": ((70, 14, 30), (150, 40, 50)), "MARKET AAJ": (
                   "BREAKING SAMJHO": ((90, 10, 20), (20, 20, 40)), "ZAROORI KHABAR": ((90, 10, 20), (20, 20, 40))}
 
 
-def cover(series: str, episode: int, hook: str, out: Path, handle: str = "", icon: str = "") -> Path:
+def cover(series: str, episode: int, hook: str, out: Path, handle: str = "", icon: str = "", character: str = "",
+          expression: str = "") -> Path:
     """The Reel's cover for the profile grid: the beat's icon, the series in its colour, the hook in big letters, the
     episode. Everything sits in the middle 1080x1440, which the profile grid shows."""
     top, bottom = SERIES_COLOURS.get(series, ((18, 24, 64), (88, 28, 135)))
     img = _gradient(top, bottom).convert("RGBA")
     pic = emoji(icon, 230) if icon else None
+    if character:
+        from . import cast
+        pic = cast.badge(character, expression or "smile", False, False, 260)
     if pic is not None:
         _paste(img, pic, W / 2, 440)
     _paste(img, _pill(series, font(48), YELLOW, (20, 20, 20)), W / 2, 640)

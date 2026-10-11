@@ -132,3 +132,13 @@ What changed in `render.py` (30 frames a second, streamed into ffmpeg):
 Cost: ~15 ms a frame here (about a minute of rendering for a 60 s Reel; roughly twice that on the 2-core server).
 Next step if Insights show viewers still skip early: real B-roll footage under the headline from the free Pexels API
 (needs a free key; Pexels' licence allows commercial use without credit).
+
+## 9. Audience psychology and growth (11 Oct 2026)
+
+Full report with sources: `reports/Short form finance audience growth.md` (notes in
+`research_notes/Short form finance audience growth/`). In short: Indian viewers fear losing money more than they want
+to get rich (SEBI survey 2025: ~80% prefer protecting capital); they learn from friends and family (59%) and send
+useful Reels to them - and sends per reach is the signal Instagram says matters most for non-followers. Our first five
+Reels ran too long (53-104 s) and had no recurring "who"; every big Indian finance creator shows a face, and the
+faceless accounts that grew built a character. Hence the changes listed in README (length governor, hook and re-hook
+rules, spoken send line, source tags, drawn cast with an A/B test by week).
