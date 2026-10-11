@@ -84,6 +84,20 @@ class ReelScript(BaseModel):
 
 PROMISE = re.compile(r"\b(guarantee\w*|pakka (?:profit|return)|paisa double|double ho jayega|jackpot|"
                      r"sure ?shot|risk[- ]?free return)\b", re.I)
+# "koi guarantee nahi", "no guaranteed return", "पैसा डबल नहीं होता" - saying there is NO promise is the lesson itself
+NEG_BEFORE = re.compile(r"(?:\b(?:koi|no|not|without|bina|never|kabhi)\b|कोई|बिना|कभी)[^.!?।]{0,20}$", re.I)
+NEG_AFTER = re.compile(r"^[^.!?।]{0,20}?(?:\bnahi\b|\bnahin\b|\bnahi?n?\?|नहीं|नही)", re.I)
+
+
+def promise(text: str, rx=None):
+    """The first promise word in text that is not negated, or None."""
+    for m in (rx or PROMISE).finditer(text):
+        if NEG_BEFORE.search(text[max(0, m.start() - 30):m.start()]) or NEG_AFTER.match(text[m.end():m.end() + 30]):
+            continue
+        return m
+    return None
+
+
 COMMAND = re.compile(r"\b(kharidiye|kharid lo|kharido|bechiye|bech do|becho|buy karo|buy kar lo|sell karo|sell kar do|"
                      r"abhi invest karo|target price|stop[- ]?loss (?:lagao|rakho))\b", re.I)
 ACTION = re.compile(r"\b(buy|sell|kharid\w*|bech\w*|target|entry|exit|accumulate|hold karo)\b", re.I)
@@ -139,7 +153,7 @@ def check(script: ReelScript, companies: List[str], strict: bool = False, compan
         text = f"{s.narration} {s.on_screen}"
         named = any(n in text.lower() for n in names)
         for rx, what in ((PROMISE, "promise"), (COMMAND, "instruction to trade"), (PREDICT, "prediction")):
-            m = rx.search(text)
+            m = promise(text) if rx is PROMISE else rx.search(text)
             if m:
                 issues.append(f"scene {i}: {what} '{m.group(0)}'")
         if company_mode:
@@ -155,8 +169,9 @@ def check(script: ReelScript, companies: List[str], strict: bool = False, compan
             if bad:
                 issues.append(f"scene {i}: {bad} next to a named company")
     for rx in (PROMISE, COMMAND, PREDICT):
-        if rx.search(script.caption):
-            issues.append(f"caption: '{rx.search(script.caption).group(0)}'")
+        m = promise(script.caption) if rx is PROMISE else rx.search(script.caption)
+        if m:
+            issues.append(f"caption: '{m.group(0)}'")
     return issues
 
 
@@ -183,7 +198,7 @@ def _spoken_issues(s: Scene, named: bool) -> List[str]:
     out, sp = [], _plain(s.spoken)
     for rx, what in ((PROMISE, "promise"), (COMMAND, "instruction to trade"), (PREDICT, "prediction"),
                      (HI_PROMISE, "promise"), (HI_COMMAND, "instruction to trade"), (HI_PREDICT, "prediction")):
-        m = rx.search(sp)
+        m = promise(sp, rx) if rx in (PROMISE, HI_PROMISE) else rx.search(sp)
         if m:
             out.append(f"{what} '{m.group(0)}'")
     if named:

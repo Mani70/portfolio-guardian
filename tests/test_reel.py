@@ -301,3 +301,11 @@ def test_starter_pack_restarts_numbering_and_pauses_the_daily_slots(tmp_path, mo
     assert "Kal:" not in said[1]                                             # no teaser: posted over several days
     assert job.run(said.append, lambda p, c: True, today=date(2026, 10, 12), out_dir=tmp_path) == \
         "reel (morning): paused until 2026-10-13 (the starter pack is being posted)"
+
+
+def test_saying_there_is_no_guarantee_is_allowed_but_a_promise_is_not():
+    assert S.promise("Stop-loss koi guarantee nahi hai.") is None
+    assert S.promise("No guaranteed returns in F&O.") is None and S.promise("Paisa double nahi hota.") is None
+    assert S.promise("Isme guaranteed return milega!") and S.promise("Guarantee? Nahi.")      # a new sentence: blocked
+    assert S.promise(S._plain("stop-loss कोई गारंटी नहीं है"), S.HI_PROMISE) is None
+    assert S.promise(S._plain("इसमें गारंटी है"), S.HI_PROMISE)
