@@ -92,3 +92,53 @@ were measured with ffmpeg.
 No platform data was found on what makes viewers come back. The format uses the usual devices - numbered series, a
 fixed time each day, an open question, tomorrow's teaser - and the Instagram Insights numbers after 2-3 weeks (average
 watch time, sends per reach, returning viewers) should decide what stays.
+
+## 8. How the Reel looks (11 Oct 2026)
+
+The first Reels were "plain text in each frame": a still gradient, a big line of text and a caption box per beat. What
+the research says about the picture:
+
+- **Text-only frames rank lower.** Instagram's creator guidance says Reels "predominantly covered by text" are less
+  likely to be recommended. [Tubefilter](https://tubefilter.com/2021/02/10/instagram-reels-with-tiktok-watermark-less-discoverable/) - moderate.
+  Professional explainers (Bloomberg Quicktake, WSJ, Think School, CNBC-TV18) always put a real visual - footage, a
+  chart, a screenshot, an icon - under a short headline.
+- **Moderate pace beats frantic pace.** Across 1,200 short videos (validated on ~14,500), engagement rose with the
+  intensity of cuts, motion and sound up to a point and then fell (an inverted U).
+  [arXiv 2604.19995](https://arxiv.org/pdf/2604.19995) - solid. Editing pace and colourfulness correlate with
+  engagement on TikTok. [J. Business Research 2025](https://www.sciencedirect.com/science/article/abs/pii/S0148296325004850) - correlational.
+- **Captions** add view time (Facebook: ~12%) and most people watch muted in public.
+  [3Play](https://www.3playmedia.com/blog/captions-increase-viewership-for-facebook-video-ads/) - moderate.
+- **Safe zone**: Instagram covers the top ~270 px, the bottom third (username, caption) and ~130 px on the right
+  (buttons); the profile grid shows the middle 1080x1440. [adsuploader](https://adsuploader.com/blog/meta-ads-safe-zones),
+  [Hopper](https://www.hopperhq.com/blog/instagram-reel-size/) - moderate (Meta publishes no organic numbers).
+- **Sound effects and music**: no good evidence they lift retention; used sparingly. Zoom punches, emojis, kinetic
+  type: common craft, no published lift numbers - weak.
+- **Faces**: photos with faces get ~38% more likes (1.1 M Instagram photos, correlational). We have no face; a
+  consistent icon per beat is the stand-in.
+
+What changed in `render.py` (30 frames a second, streamed into ffmpeg):
+
+| Before | Now |
+|---|---|
+| still gradient | background with soft glows and a dot grid that drifts slowly |
+| one big line of text | a big icon per beat (chosen by Claude from ~120 Noto emoji) that pops in and floats; the headline's words pop in one by one, numbers and one *starred* key word in colour |
+| numbers as text | a beat that is just a number counts up to it (with a soft "ding") |
+| market facts as text | MARKET AAJ: the Nifty's last 60 sessions as a line that draws itself, sectors and FII/DII as bars that grow (index level only, the day's NSE data) |
+| 4-word caption box | 3 words at a time in heavy outlined letters, the current word in yellow with a small pop |
+| hard cuts | a quick zoom-settle and a soft whoosh on each new beat; a short shake on the twist |
+| DejaVu font | Poppins Black / ExtraBold (Open Font License) |
+| text down to y=1500+ | everything important inside x 70-950, y 270-1300 |
+
+Cost: ~15 ms a frame here (about a minute of rendering for a 60 s Reel; roughly twice that on the 2-core server).
+Next step if Insights show viewers still skip early: real B-roll footage under the headline from the free Pexels API
+(needs a free key; Pexels' licence allows commercial use without credit).
+
+## 9. Audience psychology and growth (11 Oct 2026)
+
+Full report with sources: `reports/Short form finance audience growth.md` (notes in
+`research_notes/Short form finance audience growth/`). In short: Indian viewers fear losing money more than they want
+to get rich (SEBI survey 2025: ~80% prefer protecting capital); they learn from friends and family (59%) and send
+useful Reels to them - and sends per reach is the signal Instagram says matters most for non-followers. Our first five
+Reels ran too long (53-104 s) and had no recurring "who"; every big Indian finance creator shows a face, and the
+faceless accounts that grew built a character. Hence the changes listed in README (length governor, hook and re-hook
+rules, spoken send line, source tags, drawn cast with an A/B test by week).

@@ -32,7 +32,8 @@ case "$job" in
   reel-market) limit=40m; cmd=(-m trader.run reel --slot market) ;;
   reel-company) limit=40m; cmd=(-m trader.run reel --slot company) ;;
   reel-breaking) limit=12m; cmd=(-m trader.run reel --slot breaking) ;;
-  *) echo "usage: $0 intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|insights|fo-paper|reel|reel-market|reel-evening|reel-company|reel-breaking|reboot" >&2; exit 2 ;;
+  reel-starter) limit=2h;  cmd=(-m trader.run reel --starter) ;;          # run once by hand: the 9-Reel starter pack
+  *) echo "usage: $0 intraday|watch|swing-check|swing-plan|guardian|health|backup|report|universe|holidays|autodeploy|retest|insights|fo-paper|reel|reel-market|reel-evening|reel-company|reel-breaking|reel-starter|reboot" >&2; exit 2 ;;
 esac
 
 mkdir -p logs/cron

@@ -493,6 +493,12 @@ def compile_day(today: date, store: Path, holidays=(), client=None, get=None, se
     try:                                                                   # chart reading: index level only
         h = index_history(hist_path or ROOT / "cache" / "reel" / "index_hist.csv", today,
                           {n: ix[n]["close"] for n in CHART if n in ix}, fetch, holidays)
+        s60 = h["nifty50"].dropna().tail(60) if "nifty50" in h else None
+        if s60 is not None and len(s60) >= 20:                           # the Reel's line chart (index level)
+            ends = [pd.Timestamp(s60.index[0]), pd.Timestamp(s60.index[-1])]
+            day["spark"] = {"values": [round(float(x), 2) for x in s60],
+                            "from": "" if pd.isna(ends[0]) or ends[0].year < 2000 else f"{ends[0]:%d %b}",
+                            "to": "" if pd.isna(ends[1]) or ends[1].year < 2000 else f"{ends[1]:%d %b}"}
         for n, (label, key) in CHART.items():
             if key in h and n in ix:
                 f = chart_facts(label, h[key], ix[n].get("high52"), ix[n].get("low52"))

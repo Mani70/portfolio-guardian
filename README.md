@@ -462,8 +462,10 @@ search retrieved, and every sentence passes a SEBI check in code (no forecast, i
 with a % or a price). It costs about $0.15-0.40 a day of Anthropic credit (up to 10 searches + reading).
 
 Built for watch time (research notes: `trader/reel/RESEARCH.md`): a hook in the first beat, 8-12 beats with a new
-picture every beat, word-by-word captions with the current word highlighted, a progress bar, big numbers, trimmed
-pauses, loudness -14 LUFS, a comment question and tomorrow's teaser at the end, episode numbers. Numbers are spelled out
+picture every beat, and nothing standing still (30 fps): a drifting background, a big icon per beat, headline words that
+pop in, numbers that count up, the Nifty / sectors / FII-DII as animated charts on MARKET AAJ, soft whoosh and pop
+effects, word-by-word captions with the current word highlighted, a progress bar, all inside Instagram's safe zone,
+trimmed pauses, loudness -14 LUFS, a comment question and tomorrow's teaser at the end, episode numbers. Numbers are spelled out
 for the voice (2536 -> "दो हज़ार पाँच सौ छत्तीस"; "Nifty 50" stays "Nifty fifty").
 
 Education only (SEBI's Jan 2025 circular: unregistered people may not give investment advice or make performance
@@ -483,7 +485,23 @@ reel:
   speak: devanagari                    # the voice reads Hindi words in Devanagari (captions stay Roman); default roman
   evening: true                        # the 21:30 Reel (the day's top news explained, or a market-history story)
   market: true                         # the weekday MARKET AAJ wrap + daily brief (default on)
+  characters: ab                       # the drawn cast: ab (on in even weeks, off in odd - a test), on, off
 ```
+**Growth research** (`reports/Short form finance audience growth.md`): why people stop, watch, send and follow, what
+top creators do, how Instagram grows a new account, and which pictures of people are safe. What the Reels do with it:
+45-60 s (word limits set from the real voice speed, long pauses trimmed, a Reel over its limit sped up at most 12%);
+a hook that puts the viewer's money or a belief they hold at stake, and a "lekin twist..." re-hook mid-way; a spoken
+"Papa ko bhejo jo..." send line in the last beat; a small "Source: ..." tag on every number; no politicians or parties;
+no prediction game in the comments (the guess stays in the Story poll); a search phrase as the caption's first line and
+at most 5 hashtags; the last hooks are passed on so openings do not repeat. **The cast** (`trader/reel/cast.py`): six
+drawn, clearly fictional characters - SACHI the narrator (opens and closes, her mouth moves with the voice), Priya
+(first salary), Rahul (tempted by F&O), Sharma ji (Papa, FDs), Sunita (Mummy, household budget), Raju (kirana shop) -
+in round badges with six expressions, never as a winner or next to a return figure. No photo-real AI people or AI
+presenters (labelling rules, deepfake look). Each Reel's Telegram note says whether characters were on, so Insights
+can compare the two groups after a few weeks. **Starter pack** (`trader.run reel --starter`): restarts the episode numbers from 1
+(old state kept in cache/reel/state.before-starter.json) and sends 9 Reels in posting order - loss-framed myths, true
+stories and PATHSHALA Din 1, drawn cast on, no "kal..." teasers; the morning and night Reels pause for 2 days while
+they are posted (MARKET AAJ continues).
 **Choosing the voice:** `trader.run voices` sends Telegram clips of the same Hinglish lines read by your own voices and
 the most used Hindi voices of the Voice Library (about 3k credits); `trader.run voices --voice <ID>` reads them 4 ways
 for one voice - eleven_multilingual_v2 / eleven_v3, Hindi in Roman letters / in Devanagari - each clip's caption has the

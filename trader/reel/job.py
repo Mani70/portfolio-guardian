@@ -13,11 +13,11 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
-from . import company, content, engage, market, night, numbers, render, script as S, voice
+from . import cast, company, content, engage, market, night, numbers, render, script as S, voice
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "cache" / "reel"
@@ -100,10 +100,14 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
     f = {"date": today.isoformat()}
     if topic:
         kind, _, n = topic.partition(":")
-        items = {"myth": content.MYTHS, "story": content.STORIES}.get(kind)
+        items = {"myth": content.MYTHS, "story": content.STORIES, "pathshala": content.PATHSHALA}.get(kind)
         if items is None or not n.isdigit() or int(n) >= len(items):
-            raise ValueError(f"topic must be myth:0-{len(content.MYTHS) - 1} or story:0-{len(content.STORIES) - 1}")
-        if kind == "myth":
+            raise ValueError(f"topic must be myth:0-{len(content.MYTHS) - 1}, story:0-{len(content.STORIES) - 1} "
+                             f"or pathshala:0-{len(content.PATHSHALA) - 1}")
+        if kind == "pathshala":
+            item = items[int(n)]
+            f.update(format="pathshala", lesson=item, day_no=int(n) + 1, total=len(content.PATHSHALA))
+        elif kind == "myth":
             myth, truth, lesson = items[int(n)]
             f.update(format="myth", myth=myth, truth=truth, lesson=(lesson, content.LESSON[lesson]),
                      next=content.pick(content.MYTHS, today + timedelta(days=1))[0])
@@ -167,11 +171,63 @@ def facts_for(today: date, slot: str, episodes: dict, store: Optional[Path] = No
     return f
 
 
+def cast_week(d: date, setting: str = "ab") -> bool:
+    """Are the drawn characters in this Reel? 'on', 'off', or 'ab': on in even ISO weeks, off in odd ones - an A/B
+    test the owner reads in Instagram Insights after a few weeks (reports/Short form finance audience growth.md)."""
+    s = (setting or "ab").lower()
+    return s in ("on", "true", "yes") or (s == "ab" and d.isocalendar()[1] % 2 == 0)
+
+
+# the longest each format may run (seconds, with the disclaimer); a longer voice is sped up a little to fit
+MAX_SECS = {"company": 68, "market": 72, "night": 105}
+
+
+def _crore(x: float) -> str:
+    return f"{'+' if x >= 0 else '-'}₹{abs(x):,.0f} cr"
+
+
+def visuals(kinds: List[str], facts: dict, day: Optional[dict]) -> List[dict]:
+    """Charts for the market Reel's beats, from the day's own data (index level only): the first 'market' beat gets
+    the Nifty's last 60 sessions as a line, a second one the broad indices; 'sector' the 3 best and 3 worst sectors;
+    'flows' the FII and DII money. Other beats get their icon."""
+    out = [{} for _ in kinds]
+    if facts.get("format") != "market" or not day:
+        return out
+    seen = set()
+    for i, k in enumerate(kinds):
+        v = None
+        if k == "market" and "market" not in seen and day.get("spark"):
+            sp = day["spark"]
+            v = {"type": "line", "values": sp["values"], "from": sp["from"], "to": sp["to"],
+                 "last": f"Nifty {sp['values'][-1]:,.0f}"}
+        elif k == "market" and day.get("broad"):
+            v = {"type": "bars", "items": [(n, x["pct"], f"{x['pct']:+.2f}%") for n, x in day["broad"].items()
+                                           if x.get("pct") is not None]}
+        elif k == "sector" and "sector" not in seen and day.get("sectors"):
+            s = day["sectors"]
+            best = s[::-1][:3]
+            worst = [x for x in s[:3] if x not in best][::-1]
+            v = {"type": "bars", "items": [(n, p, f"{p:+.2f}%") for n, p in best + worst]}
+        elif k == "flows" and "flows" not in seen and day.get("fii") is not None:
+            items = [("Videshi (FII)", day["fii"], _crore(day["fii"]))]
+            if day.get("dii") is not None:
+                items.append(("Desi funds (DII)", day["dii"], _crore(day["dii"])))
+            v = {"type": "bars", "items": items}
+        if v and v.get("items", v.get("values")):
+            out[i]["visual"] = v
+            out[i]["source"] = f"NSE data, {datetime.fromisoformat(day['date']):%d %b %Y}" if day.get("date") \
+                else "NSE data"
+            seen.add(k)
+    return out
+
+
 def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = None, handle: str = "",
          voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
          slot: str = "morning", episodes: Optional[dict] = None, topic: str = "", day: Optional[dict] = None,
-         facts_override: Optional[dict] = None) -> dict:
+         facts_override: Optional[dict] = None, characters: str = "ab") -> dict:
     facts = facts_override or facts_for(today, slot, episodes or {}, store, topic, day, out_dir)
+    facts.setdefault("recent_hooks", list((episodes or {}).get("_hooks", []))[-6:])
+    facts["cast"] = cast_week(today, characters)
     sc, source = S.write(facts, client)
     if facts.get("breaking"):
         slot = f"breaking{facts['episode']}"
@@ -190,11 +246,21 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
                            prev=said[i - 1] if i else None, nxt=said[i + 1] if i + 1 < len(said) else None)
     with ThreadPoolExecutor(4) as ex:
         spoken = list(ex.map(one, range(len(items))))
-    scenes = [(kind, on_screen, narration, spoken[i][0]) for i, (kind, on_screen, narration, _) in enumerate(items)]
+    extras = visuals([s.kind for s in sc.scenes], facts, day) + [{}]
+    for x, s in zip(extras, sc.scenes):
+        x.setdefault("icon", s.icon)
+        who = cast.pick(s.character) if facts["cast"] else None
+        if who and "visual" not in x:
+            x.update(character=who, expression=s.expression)
+        if s.source:
+            x.setdefault("source", s.source)
+    scenes = [(kind, on_screen, narration, spoken[i][0], extras[i])
+              for i, (kind, on_screen, narration, _) in enumerate(items)]
     voices = {v for _, v in spoken}
     top = f"{facts.get('series') or S.SERIES[facts['format']]}  •  EP {facts['episode']}"
-    video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}_{slot}.mp4", work, handle, top)
-    tags = " ".join("#" + h.lstrip("#").replace(" ", "") for h in sc.hashtags[:8])
+    video = render.build(scenes, out_dir / f"reel_{today:%Y%m%d}_{slot}.mp4", work, handle, top,
+                         max_secs=MAX_SECS.get(facts["format"], 60))
+    tags = " ".join("#" + h.lstrip("#").replace(" ", "") for h in sc.hashtags[:5])
     caption = f"{top}\n\n{sc.caption}\n\n{S.CAPTION_DISCLAIMER}\n\n{tags}"
     if facts.get("news"):
         caption += f"\n\nSource: NSE announcement, {facts['news']['symbol']} ({facts['news']['date']})"
@@ -208,12 +274,72 @@ def make(today: date, out_dir: Path = OUT, client=None, store: Optional[Path] = 
     if facts.get("macro"):
         caption += "\n\nSources: " + ", ".join(sorted({market._domain(u) for u in facts["macro"]["source_urls"]}))
     series = facts.get("series") or S.SERIES[facts["format"]]
-    cover = render.cover(series, facts["episode"], sc.scenes[0].on_screen or sc.title, work / "cover.png", handle)
+    cover = render.cover(series, facts["episode"], sc.scenes[0].on_screen or sc.title, work / "cover.png", handle,
+                         extras[0].get("icon") or render.KIND_EMOJI["hook"], extras[0].get("character", ""),
+                         extras[0].get("expression", ""))
     return {"video": video, "caption": caption, "script": sc, "script_source": source, "format": facts["format"],
             "voice": ", ".join(sorted(voices)), "news": facts.get("news"), "question": sc.scenes[-1].narration,
             "cover": cover, "series": series,
             "topic_title": facts.get("myth") or (facts.get("lesson") or ("",))[0] if facts["format"] in ("myth", "pathshala")
-            else (facts.get("story") or ("",))[0], "checklist": engage.checklist(series, sc.scenes[-1].narration, cover)}
+            else (facts.get("story") or ("",))[0], "checklist": engage.checklist(series, sc.scenes[-1].narration, cover),
+            "cast": facts["cast"]}
+
+
+# The starter pack: 9 Reels that fill the profile grid when the account restarts, in POSTING order - the last one ends
+# up top-left. Loss-framed myths and true stories led the first Reels' views; PATHSHALA Din 1 is the "start here".
+STARTER = ["myth:17", "story:9", "pathshala:0", "myth:8", "story:1", "myth:14", "myth:0", "myth:13", "story:0"]
+
+
+def starter(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, handle: str = "",
+            voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman", send_photo=None,
+            topics: Optional[List[str]] = None, pause_days: int = 2) -> str:
+    """Restart the series: episode numbers from 1 (the old state is kept as state.before-starter.json), then the
+    starter Reels one by one, each sent to Telegram with its number in the posting order. No 'kal...' teasers (they
+    are posted over a few days), drawn cast on. The morning and evening Reels pause for `pause_days` days so the
+    owner posts these instead."""
+    today = today or date.today()
+    topics = topics or STARTER
+    out_dir.mkdir(parents=True, exist_ok=True)
+    state_p = out_dir / "state.json"
+    st = json.loads(state_p.read_text()) if state_p.exists() else {}
+    (out_dir / "state.before-starter.json").write_text(json.dumps(st))
+    st["episodes"] = {}
+    st["pause_until"] = (today + timedelta(days=pause_days)).isoformat()
+    state_p.write_text(json.dumps(st))
+    notify(f"🚀 STARTER PACK: {len(topics)} Reels coming, one every few minutes. Archive the old Reels first "
+           "(Reel → ⋯ → Archive). Post these IN THIS ORDER (1 first, the last one ends up top-left), 3-4 a day "
+           f"with 2+ hours between them. Morning and night Reels pause until {st['pause_until']}; MARKET AAJ "
+           "continues.")
+    done = 0
+    for k, topic in enumerate(topics, 1):
+        st = json.loads(state_p.read_text())                              # fresh: other jobs may have written
+        episodes = st.get("episodes", {})
+        try:
+            facts = facts_for(today, "morning", episodes, None, topic, None, out_dir)
+            facts.pop("next", None)
+            r = make(today, out_dir, client, None, handle, voice_model, voice_id, speak, f"starter{k}", episodes,
+                     topic, facts_override=facts, characters="on")
+        except Exception as e:                                             # noqa: BLE001 - one bad Reel, keep going
+            log.warning("starter %s: %s", topic, e)
+            notify(f"Starter {k}/{len(topics)} ({topic}) failed: {type(e).__name__}. The others continue.")
+            continue
+        send_video(r["video"], f"🚀 STARTER {k}/{len(topics)} - {r['series']} - post #{k}")
+        if send_photo:
+            send_photo(r["cover"], f"🖼️ Cover for STARTER {k}/{len(topics)}")
+        notify(f"📝 STARTER {k}/{len(topics)} caption:\n\n{r['caption']}")
+        notify(r["checklist"] + f"\nScript: {r['script_source']}. Voice: {r['voice']}.")
+        st = json.loads(state_p.read_text())
+        episodes = st.get("episodes", {})
+        episodes[r["format"]] = episodes.get(r["format"], 0) + 1
+        episodes["_hooks"] = (list(episodes.get("_hooks", [])) + [r["script"].scenes[0].narration[:120]])[-8:]
+        if r.get("topic_title"):
+            episodes["_used"] = (episodes.get("_used", []) + [r["topic_title"]])[-80:]
+        st["episodes"] = episodes
+        state_p.write_text(json.dumps(st))
+        done += 1
+    notify(f"✅ Starter pack ready: {done} of {len(topics)} Reels. After posting, pin 3: PAISA KI PATHSHALA Din 1 "
+           "(start here), the Harshad Mehta story and the F&O myth.")
+    return f"reel (starter): sent {done} of {len(topics)}"
 
 
 def cleanup(out_dir: Path, today: date, video_days: int = 14, image_days: int = 7) -> int:
@@ -235,13 +361,15 @@ def cleanup(out_dir: Path, today: date, video_days: int = 14, image_days: int = 
 def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, client=None, store=None,
         handle: str = "", voice_model: Optional[str] = None, voice_id: Optional[str] = None, speak: str = "roman",
         force: bool = False, slot: str = "morning", topic: str = "", holidays=(), search: bool = True,
-        send_photo=None, send_album=None) -> str:
+        send_photo=None, send_album=None, characters: str = "ab") -> str:
     today = today or date.today()
     state_p = out_dir / "state.json"
     st = json.loads(state_p.read_text()) if state_p.exists() else {}
     sent = st.get("sent_" + slot, st.get("sent") if slot == "morning" else None)
     if sent == today.isoformat() and not force:
         return f"reel ({slot}): already sent today"
+    if slot in ("morning", "evening") and not topic and not force and st.get("pause_until", "") >= today.isoformat():
+        return f"reel ({slot}): paused until {st['pause_until']} (the starter pack is being posted)"
     episodes = st.get("episodes", {})
     if "_used" not in episodes and episodes.get("myth", 0) >= 2:           # the 3 starter Reels (--topic myth:0,
         episodes["_used"] = [content.MYTHS[0][0], content.MYTHS[13][0], content.STORIES[0][0]]   # story:0, myth:13)
@@ -269,13 +397,15 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
         market.save(day, out_dir)
         for part in market.parts(market.brief(day)):
             notify(part)
-    r = make(today, out_dir, client, store, handle, voice_model, voice_id, speak, slot, episodes, topic, day)
+    r = make(today, out_dir, client, store, handle, voice_model, voice_id, speak, slot, episodes, topic, day,
+             characters=characters)
     ok = send_video(r["video"], f"🎬 {r['series']} Reel ({today:%a %d %b}) - review before posting")
     if send_photo:
         send_photo(r["cover"], f"🖼️ Cover for this Reel ({r['series']})")
     notes = [f"📝 Instagram caption (copy-paste):\n\n{r['caption']}",
              r["checklist"] + "\nBefore you post: watch it once; open the source link if a company is named.\n"
-             f"Script: {r['script_source']}. Voice: {r['voice']}."]
+             f"Script: {r['script_source']}. Voice: {r['voice']}. Characters: "
+             f"{'ON (test group A)' if r.get('cast') else 'OFF (test group B)'} - note it with this Reel's Insights."]
     if not ok:
         notes.insert(0, f"The video could not be sent on Telegram; it is on the server at {r['video']}")
     for n in notes:
@@ -293,6 +423,7 @@ def run(notify, send_video, today: Optional[date] = None, out_dir: Path = OUT, c
             log.warning("carousel/poll: %s", e)
     out_dir.mkdir(parents=True, exist_ok=True)
     episodes[r["format"]] = episodes.get(r["format"], 0) + 1
+    episodes["_hooks"] = (list(episodes.get("_hooks", [])) + [r["script"].scenes[0].narration[:120]])[-8:]
     if r["format"] in ("myth", "pathshala", "story"):
         title = r.get("topic_title")
         if title:

@@ -119,6 +119,44 @@ def test_word_captions_follow_the_voice_and_frames_have_a_progress_bar():
     assert img.size == (1080, 1920) and img.getpixel((200, 5)) == render.YELLOW and img.getpixel((900, 5)) == (0, 0, 0)
 
 
+def test_beats_get_icons_counters_and_charts_inside_the_safe_zone():
+    assert "📈" in render.emoji_list() and render.has_emoji("⚖️") and not render.has_emoji("🦄")
+    c = render._counter("₹1,23,456 crore")
+    assert c == ("₹", 123456.0, 0, True, "crore") and render._count_text(c, 1.0) == "₹1,23,456 crore"
+    assert render._count_text(render._counter("93%"), 0.0) == "0%" and render._counter("Nifty 50") is None
+    still = render.frame("truth", "93%", ["93", "percent"], 0, 0.4, icon="😱")
+    line = render.frame("market", "Nifty 3 mahine", ["Nifty"], 0, 0.5, at=3.0,
+                        visual={"type": "line", "values": list(range(100, 160)), "from": "1 Aug", "to": "9 Oct",
+                                "last": "Nifty 159"})
+    assert still.size == line.size == (1080, 1920)
+    px = line.crop((render.SAFE_LEFT, 600, render.SAFE_RIGHT, 1100)).getcolors(1_000_000)
+    assert any(abs(r - render.GREEN[0]) < 6 and abs(g - render.GREEN[1]) < 6 for _, (r, g, b) in px)  # the up-line
+    day = {"spark": {"values": [1.0, 2.0, 3.0], "from": "1 Aug", "to": "9 Oct"},
+           "broad": {"Nifty 50": {"close": 3.0, "pct": 0.5}},
+           "sectors": [("Metal", -1.2), ("Auto", -0.4), ("Bank", 0.9), ("IT", 1.8)], "fii": -1234.5, "dii": 2000.0}
+    v = job.visuals(["hook", "market", "sector", "flows", "market", "question"], {"format": "market"}, day)
+    assert v[0] == {} and v[1]["visual"]["type"] == "line" and v[4]["visual"]["type"] == "bars"
+    assert [x[0] for x in v[2]["visual"]["items"]] == ["IT", "Bank", "Auto", "Metal"]
+    assert v[3]["visual"]["items"][0][2] == "-₹1,234 cr" and job.visuals(["market"], {"format": "myth"}, day) == [{}]
+    assert "{icons}" not in S.SYSTEM and "🧠" in S.SYSTEM
+
+
+def test_drawn_cast_takes_turns_by_week_and_shows_on_story_beats(monkeypatch):
+    from trader.reel import cast
+    assert job.cast_week(date(2026, 10, 12)) and not job.cast_week(date(2026, 10, 19))      # ISO weeks 42 / 43
+    assert job.cast_week(date(2026, 10, 19), "on") and not job.cast_week(date(2026, 10, 12), "off")
+    assert cast.pick("sharma") == "Sharma ji" and cast.pick("Sachi") == "Sachi" and cast.pick("Elon") is None
+    assert cast.badge("Priya", "worried", size=200).size == (200, 200)
+    assert cast.badge("Sachi", talking=True) is not cast.badge("Sachi")                  # the mouth moves
+    img = render.frame("story", "Pehli *salary*", ["Priya", "ki"], 0, 0.3, icon="💵", character="Priya",
+                       expression="proud")
+    assert img.size == (1080, 1920) and img.getpixel((render.CX, 625)) != img.getpixel((render.CX, 1700))
+    assert "Sachi" in S._brief({"date": "2026-10-12", "format": "pathshala", "episode": 2, "cast": True,
+                                "lesson": ("FD", "FD safe hai"), "day_no": 2, "total": 40})
+    assert "OUR CAST" not in S._brief({"date": "2026-10-19", "format": "pathshala", "episode": 2, "cast": False,
+                                       "lesson": ("FD", "FD safe hai"), "day_no": 2, "total": 40})
+
+
 def test_full_reel_without_keys_builds_a_video_and_says_why(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
@@ -133,7 +171,7 @@ def test_full_reel_without_keys_builds_a_video_and_says_why(tmp_path, monkeypatc
     assert job.run(said.append, lambda p, c: True, today=date(2026, 10, 12), out_dir=tmp_path, store=tmp_path / "none",
                    slot="evening").startswith("reel (evening): sent story")
     st = json.loads((tmp_path / "state.json").read_text())
-    assert {k: v for k, v in st["episodes"].items() if k != "_used"} == {"myth": 1, "story": 1}
+    assert {k: v for k, v in st["episodes"].items() if not k.startswith("_")} == {"myth": 1, "story": 1}
     assert len(st["episodes"]["_used"]) == 2 and st["sent_evening"] == "2026-10-12"
 
 
@@ -246,3 +284,20 @@ def test_old_videos_and_cards_are_cleaned_up(tmp_path):
     os.utime(old, (past, past))
     os.utime(card, (past, past))
     assert job.cleanup(tmp_path, date(2026, 10, 11)) == 2 and new.exists() and not old.exists()
+
+
+def test_starter_pack_restarts_numbering_and_pauses_the_daily_slots(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    (tmp_path / "state.json").write_text(json.dumps({"episodes": {"myth": 3, "story": 1}, "polls": [1]}))
+    said, videos = [], []
+    msg = job.starter(said.append, lambda p, c: videos.append(c) or True, today=date(2026, 10, 11), out_dir=tmp_path,
+                      topics=["pathshala:0", "myth:13"])
+    assert msg == "reel (starter): sent 2 of 2" and videos[0].startswith("🚀 STARTER 1/2 - PAISA KI PATHSHALA")
+    st = json.loads((tmp_path / "state.json").read_text())
+    assert {k: v for k, v in st["episodes"].items() if not k.startswith("_")} == {"pathshala": 1, "myth": 1}
+    assert st["polls"] == [1] and json.loads((tmp_path / "state.before-starter.json").read_text())["episodes"]["myth"] == 3
+    assert "PAISA KI PATHSHALA  •  EP 1" in said[1] and "MYTH vs SACH  •  EP 1" in said[3]
+    assert "Kal:" not in said[1]                                             # no teaser: posted over several days
+    assert job.run(said.append, lambda p, c: True, today=date(2026, 10, 12), out_dir=tmp_path) == \
+        "reel (morning): paused until 2026-10-13 (the starter pack is being posted)"
